@@ -1,0 +1,38 @@
+① Parler au LLM
+
+Tu fabriques : un module qui envoie des messages à une API (OpenRouter, Groq…) et récupère la réponse. Il gère plusieurs providers et plusieurs clés, les retries, et compte les tokens et le temps.
+Fini quand : tu envoies « dis bonjour » et tu récupères la réponse + les tokens + la latence.
+
+② La sandbox
+
+Tu fabriques : un interpréteur Python enfermé, d'abord sans sécurité (exécuter le code, garder les variables, final_answer, le REPL uv run sandbox), puis avec les protections, une par une (imports, fichiers, réseau, timeout, mémoire, builtins).
+Fini quand : print(2+2) marche, et import os ou while True: pass sont bloqués proprement.
+
+③ Les outils MCP
+
+Tu fabriques : ton serveur mcp_tools_mbpp.py (avec run_tests), et le client MCP dans la sandbox, qui découvre les outils et crée les télécommandes. Plus le manuel automatique pour le LLM.
+Fini quand : dans le REPL de la sandbox, tu tapes run_tests(...) et ça marche, en stdio et en HTTP.
+
+④ La boucle (l'orchestrateur)
+
+Tu fabriques : le cœur, qui relie ① ② ③ : appeler le LLM → extraire le code → l'exécuter → renvoyer le résultat → recommencer jusqu'à final_answer. Plus le system prompt.
+Fini quand : le LLM enchaîne plusieurs tours tout seul sur un problème simple.
+
+⑤ Agent MBPP (premier vrai examen)
+
+Tu fabriques : la commande agent_mbpp (lit task.json, écrit solution.json). Ensuite tu la fais tenir dans les limites (10 itérations, 6 000 tokens).
+Fini quand : moulinette_eval validate donne ✅ sur au moins 4 tâches sur 5.
+
+⑥ Agent SWE-bench (le gros morceau)
+
+Tu fabriques : mcp_tools_swebench.py avec les 9 outils, qui travaillent dans Docker, et la commande agent_swebench, avec le nettoyage du conteneur.
+Fini quand : tes outils passent leurs tests seuls (avec TESTBED_PATH), et tu obtiens ✅ sur sympy__sympy-14711, puis sur 2 tâches sur 3.
+
+⑦ Rapports
+
+Tu fabriques : BENCHMARK_REPORT.md (5 modèles, 2 providers, 3 tâches, une ablation) et README.md.
+Fini quand : tout est rempli avec tes vraies données et les solution.json sont commités.
+
+
+MODELE : --provider-url "https://openrouter.ai/api/v1"
+	 --model-name   "qwen/qwen3-235b-a22b-2507"
