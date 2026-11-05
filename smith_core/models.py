@@ -203,3 +203,18 @@ class SWEBenchTaskInput(BaseModel):
     repo: str = Field(
         default="", description="Repository name (e.g., 'sympy/sympy')"
     )
+
+    class ExecResult(BaseModel):
+        """Result of one sandbox execution, returned to the agent loop."""
+
+        output: str = Field(
+            ..., description="stdout + traceback + system messages, truncated"
+        )
+        final_answer: Optional[str] = Field(
+            default=None, description="Not None => the agent loop stops"
+        )
+        timed_out: bool = False
+        notices: List[str] = Field(
+            default_factory=list,
+            description="e.g. 'output truncated', 'state was reset'",
+        )
