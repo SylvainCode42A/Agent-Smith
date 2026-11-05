@@ -6,7 +6,7 @@ from openai import OpenAI, APIStatusError
 
 load_dotenv()
 
-client = OpenAI (
+client = OpenAI(
     api_key=os.environ["GEMINI_API_KEY"],
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
     max_retries=0,
@@ -18,7 +18,8 @@ start = time.perf_counter()
 try:
     response = client.chat.completions.create(
         model="gemini-3.5-flash-lite",
-        messages=[{"role": "user", "content": "Compte de 1 à 10, un nombre par ligne"}],
+        messages=[{"role": "user", "content": "Compte de 1 à 10,"
+                   "un nombre par ligne"}],
         stop=["5"],
         reasoning_effort="low",
     )

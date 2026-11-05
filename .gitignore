@@ -2,4 +2,5 @@
 __pycache__/
 .env
 cache/
-moulinette/
+moulinette/.DS_Store
+try_server.py
