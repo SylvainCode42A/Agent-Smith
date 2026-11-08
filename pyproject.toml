@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "mcp>=2.3.0",
+    "mcp<2",
     "openai>=3.40.0",
     "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
@@ -24,4 +24,5 @@ packages = ["smith_core", "agent_mbpp", "agent_swebench"]
 [dependency-groups]
 dev = [
     "flake8>=7.4.1",
+    "pytest>=9.2.0",
 ]

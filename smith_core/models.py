@@ -207,7 +207,6 @@ class SWEBenchTaskInput(BaseModel):
 
 class ExecResult(BaseModel):
     """Result of one sandbox execution, returned to the agent loop."""
-
     output: str = Field(
         ..., description="stdout + traceback + system messages, truncated"
     )
