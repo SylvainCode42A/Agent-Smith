@@ -204,9 +204,8 @@ class SWEBenchTaskInput(BaseModel):
         default="", description="Repository name (e.g., 'sympy/sympy')"
     )
 
-class ExecResult(BaseModel):
-    """Result of one sandbox execution, returned to the agent loop."""
-
+    class ExecResult(BaseModel):
+        """Result of one sandbox execution, returned to the agent loop."""
     output: str = Field(
         ..., description="stdout + traceback + system messages, truncated"
     )
