@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from smith_core.models import ExecResult, SandboxConfig
 from smith_core.sandbox.mcp_client import McpClient
+from smith_core.sandbox.manual import build_manual
 
 
 class FinalAnswer(BaseException):
@@ -136,7 +137,8 @@ class Sandbox:
 
     def manual(self) -> str:
         """Return the tool manual to put in the prompt."""
-        ...
+        tools = self._mcp.tools if self._mcp is not None else []
+        return build_manual(tools, self._config)
 
     def close(self) -> None:
         """Kill the child process and close the MCP client."""
