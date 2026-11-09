@@ -19,13 +19,15 @@ Rules:
 - do not use "inspect".
 - if the tests fail, read the output and correct it on the next step.
 - give one python block per answer.
+- do not use docstrings or triple quotes inside the solution.
+- in the same block: call run_tests, then final_answer if it succeeded.
+  Never end a block with only a function definition.
 
 Example:
 Thought: I write the function and test it before submitting.
 ```python
 import json
-solution = '''def add(a, b):
-    return a + b'''
+solution = "def add(a, b):\\n    return a + b"
 r = run_tests(code=solution, test_list=TESTS)
 print(r)
 if json.loads(r)["success"]:

@@ -74,7 +74,9 @@ class LLMClient:
                 status = getattr(error, "status_code", None)
 
                 retryable = (status is None or status == 429 or
-                             status >= 500)
+                             status >= 500 or
+                             (status == 400 and isinstance(error.body, dict)
+                              and error.body.get("code") == "tool_use_failed"))
                 if not retryable or retries >= MAX_RETRIES:
                     raise
                 retries += 1
