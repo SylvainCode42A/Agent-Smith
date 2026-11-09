@@ -98,12 +98,11 @@ def main() -> None:
     args = parse_args()
     try:
         task = load_task(args.task_file)
+        server = shlex.join([sys.executable, str(ROOT / "mcp_tools_mbpp.py")])
+        sandbox = Sandbox(SandboxConfig(), McpClient.from_stdio(server))
     except Exception as error:
         write_solution(failed_solution("unknown", error), args.output)
         return
-
-    server = shlex.join([sys.executable, str(ROOT / "mcp_tools_mbpp.py")])
-    sandbox = Sandbox(SandboxConfig(), McpClient.from_stdio(server))
     try:
         sandbox.start()
         sandbox.execute(f"TESTS = {task.test_list!r}")
