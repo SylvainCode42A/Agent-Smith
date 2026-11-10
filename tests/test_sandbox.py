@@ -43,7 +43,6 @@ def test_import_allowed(sandbox, code):
     "__import__('subprocess')",
     "from os import path",
     "import os.path",
-    "eval(\"__import__('os')\")",
     "from . import x"
 ])
 def test_import_blocked(sandbox, code):
@@ -58,3 +57,47 @@ def test_fromlist_submodule_blocked():
         assert "collections.abc" in out and "ImportError" in out
     finally:
         sb.close()
+
+# ---------- restricted builtins ----------
+@pytest.mark.parametrize("code", [
+    "eval(\"__import__('os')\")",
+    "eval('1 + 1')",
+    "exec('x = 1')",
+    "compile('1', 'f', 'eval')",
+    "open('/etc/passwd')",
+    "globals()",
+    "vars()",
+])
+def test_builtin_blocked(sandbox, code):
+    assert "NameError" in sandbox.execute(code).output
+
+
+# ---------- dunders ----------
+@pytest.mark.parametrize("code", [
+    "().__class__",
+    "().__class__.__base__.__subclasses__()",
+    "__builtins__",
+    "def f(): return f.__globals__",
+])
+def test_dunder_blocked_by_ast(sandbox, code):
+    assert "SecurityError" in sandbox.execute(code).output
+
+
+@pytest.mark.parametrize("code", [
+    "getattr((), '__class__')",
+    "getattr((), '__cl' + 'ass__')",
+])
+def test_dunder_blocked_by_getattr(sandbox, code):
+    assert "AttributeError" in sandbox.execute(code).output
+
+
+# ---------- we did not block too much ----------
+@pytest.mark.parametrize("code", [
+    "if __name__ == '__main__': pass",
+    "print(getattr('abc', 'upper')())",
+    "print(getattr('abc', 'zzz', 0))",
+    "class A:\n    def __init__(self):\n        self.v = 3\nprint(A().v)",
+    "try:\n    int('x')\nexcept ValueError:\n    pass",
+])
+def test_safe_code_still_works(sandbox, code):
+    assert "ERROR" not in sandbox.execute(code).output
