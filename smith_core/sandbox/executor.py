@@ -7,7 +7,7 @@ from typing import Any, Optional
 from smith_core.models import ExecResult, SandboxConfig
 from smith_core.sandbox.mcp_client import McpClient
 from smith_core.sandbox.manual import build_manual
-from smith_core.sandbox.security import make_guarded_import
+from smith_core.sandbox.security import build_safe_builtins, check_ast
 
 
 class FinalAnswer(BaseException):
@@ -55,8 +55,7 @@ def _make_tool_wrapper(conn, name: str, params: list[str]):
 def _worker(conn, tool_specs: dict[str, list[str]], authorized_imports: list[str]) -> None:
     """Body of the child process: wait for code, run it, report back."""
     sys.stdout = _PipeStdout(conn)
-    safe_builtins = dict(builtins.__dict__)
-    safe_builtins["__import__"] = make_guarded_import(authorized_imports)
+    safe_builtins = build_safe_builtins(authorized_imports)
     namespace = {"__builtins__": safe_builtins,
                 "final_answer": _final_answer}
     for name, params in tool_specs.items():
@@ -69,6 +68,7 @@ def _worker(conn, tool_specs: dict[str, list[str]], authorized_imports: list[str
             break
 
         try:
+            check_ast(msg["code"])
             exec(msg["code"], namespace)
             conn.send({"type": "done", "final": None, "error": None})
 
