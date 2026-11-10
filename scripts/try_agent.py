@@ -64,7 +64,7 @@ def report(title, expectation, out):
 sandbox2 = FakeSandbox(SandboxConfig(), None)
 sandbox2.start()
 out2 = run_agent("demo-fail", "mbpp", "sys", "task", sandbox2, FakeLLM(),
-                 Limits(max_iterations=3), lambda: "FALLBACK")
+                 Limits(max_iterations=3), lambda steps: "FALLBACK")
 
 report("ECHEC - le modele n'appelle jamais final_answer",
        "success=False, error='max iterations reached', solution=FALLBACK",
@@ -87,7 +87,7 @@ llm3 = ScriptedLLM([
 sandbox3 = FakeSandbox(SandboxConfig(), None)
 sandbox3.start()
 out3 = run_agent("demo-ok", "mbpp", "sys", "task", sandbox3, llm3,
-                 Limits(), lambda: "FALLBACK")
+                 Limits(), lambda steps: "FALLBACK")
 
 report("REUSSITE - tour 1 teste, tour 2 appelle final_answer",
        "success=True, error=None, solution=le code de add (pas FALLBACK)",
@@ -128,7 +128,7 @@ class CrashingLLM:
 sandbox4 = FakeSandbox(SandboxConfig(), None)
 sandbox4.start()
 out4 = run_agent("demo-crash", "mbpp", "sys", "task", sandbox4,
-                 CrashingLLM(crash_at=1), Limits(), lambda: "FALLBACK")
+                 CrashingLLM(crash_at=1), Limits(), lambda steps: "FALLBACK")
 
 report("CRASH LLM - l'appel API leve une exception des le tour 1",
        "pas d'exception, success=False, error='LLM call failed...', "
@@ -146,7 +146,7 @@ print("  >>> CRASH au tour 1 gere correctement : OK\n")
 sandbox5 = FakeSandbox(SandboxConfig(), None)
 sandbox5.start()
 out5 = run_agent("demo-crash2", "mbpp", "sys", "task", sandbox5,
-                 CrashingLLM(crash_at=2), Limits(), lambda: "FALLBACK")
+                 CrashingLLM(crash_at=2), Limits(), lambda steps: "FALLBACK")
 
 report("CRASH LLM - le tour 1 reussit, l'appel du tour 2 leve une exception",
        "success=False, 1 tour conserve, error='LLM call failed...'",
@@ -166,7 +166,7 @@ if len(sys.argv) >= 3:
     sandbox = FakeSandbox(SandboxConfig(), None)
     sandbox.start()
     out = run_agent("demo", "mbpp", SYSTEM + sandbox.manual(), USER,
-                    sandbox, LLMClient(url, model), Limits(), lambda: "")
+                    sandbox, LLMClient(url, model), Limits(), lambda steps: "")
     print("success:", out.success, "| iterations:", out.iterations,
           "| error:", out.error)
     print("solution:\n", out.solution)

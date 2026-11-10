@@ -160,7 +160,7 @@ if len(sys.argv) >= 3:
                                          manual_sandbox.manual())
         out = run_agent("demo", "mbpp", sys_prompt, user_prompt,
                         manual_sandbox, llm, Limits(max_iterations=1),
-                        lambda: "")
+                        lambda steps: "")
         return out.steps[0].input_tokens
 
     cfg = SandboxConfig()

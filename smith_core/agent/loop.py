@@ -20,7 +20,7 @@ class Limits:
     max_iterations: int = 10
     max_input_tokens: int = 6000
     max_output_tokens: int = 1500
-    timeout_s: int = 120
+    timeout_s: int = 100
 
 
 def budget_left(steps, limits: Limits, start) -> bool:
@@ -121,8 +121,9 @@ def run_agent(task_id, benchmark, system_prompt, user_prompt, sandbox, llm,
         llm (LLM): Large Language Model instance used for generating responses.
         limits (Limits): Constraints on the execution, including
             max iterations and token limits.
-        fallback (Callable[[], str]): Fallback function to provide a
-            default solution in case of failure.
+        fallback (Callable[[list[StepMetrics]], str]): Called with the
+            steps when no final_answer was given; returns the solution
+            to submit anyway (e.g. the last code written).
     Returns:
         SolutionOutput: An object containing the results of the agent's
             execution, including:
@@ -205,7 +206,7 @@ def run_agent(task_id, benchmark, system_prompt, user_prompt, sandbox, llm,
         task_id=str(task_id),
         benchmark=benchmark,
         success=success,
-        solution=answer if success else fallback(),
+        solution=answer if success else fallback(steps),
         iterations=len(steps),
         total_requests=sum(1 + s.retries for s in steps),
         total_input_tokens=sum(s.input_tokens for s in steps),
