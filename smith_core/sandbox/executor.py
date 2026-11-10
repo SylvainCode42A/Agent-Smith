@@ -1,4 +1,5 @@
 """Secure sandbox executing LLM-generated code."""
+import builtins
 import multiprocessing as mp
 import sys
 from typing import Any, Optional
@@ -6,6 +7,7 @@ from typing import Any, Optional
 from smith_core.models import ExecResult, SandboxConfig
 from smith_core.sandbox.mcp_client import McpClient
 from smith_core.sandbox.manual import build_manual
+from smith_core.sandbox.security import make_guarded_import
 
 
 class FinalAnswer(BaseException):
@@ -50,10 +52,13 @@ def _make_tool_wrapper(conn, name: str, params: list[str]):
     return tool
 
 
-def _worker(conn, tool_specs: dict[str, list[str]]) -> None:
+def _worker(conn, tool_specs: dict[str, list[str]], authorized_imports: list[str]) -> None:
     """Body of the child process: wait for code, run it, report back."""
     sys.stdout = _PipeStdout(conn)
-    namespace = {"final_answer": _final_answer}
+    safe_builtins = dict(builtins.__dict__)
+    safe_builtins["__import__"] = make_guarded_import(authorized_imports)
+    namespace = {"__builtins__": safe_builtins,
+                "final_answer": _final_answer}
     for name, params in tool_specs.items():
         namespace[name] = _make_tool_wrapper(conn, name, params)
 
@@ -98,7 +103,11 @@ class Sandbox:
         ctx = mp.get_context("spawn")
         self._conn, child_conn = ctx.Pipe()
         self._proc = ctx.Process(target=_worker,
-                                args=(child_conn, tool_specs),
+                                args=(
+                                    child_conn,
+                                    tool_specs,
+                                    self._config.authorized_imports
+                                ),
                                 daemon=True)
         self._proc.start()
 
