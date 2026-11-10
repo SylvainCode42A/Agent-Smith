@@ -4,6 +4,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 
+from agent_mbpp.fallback import last_def_solution
 from agent_mbpp.prompts_mbpp import MBPP_TEMPLATE, build_user_prompt_mbpp
 from smith_core.agent.loop import Limits, run_agent
 from smith_core.agent.prompts import build_system_prompt
@@ -114,7 +115,8 @@ def main() -> None:
             sandbox,
             LLMClient(args.provider_url, args.model_name),
             Limits(max_iterations=args.max_iterations),
-            lambda: "",
+            lambda steps: last_def_solution(steps,
+                                            task.function_definition),
         )
     except Exception as error:
         solution = failed_solution(task.task_id, error)

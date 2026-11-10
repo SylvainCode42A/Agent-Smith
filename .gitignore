@@ -4,3 +4,4 @@ __pycache__/
 cache/
 moulinette/.DS_Store
 try_server.py
+.pytest_cache
