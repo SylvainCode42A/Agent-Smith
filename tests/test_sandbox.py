@@ -191,3 +191,25 @@ def test_memory_limit():
         assert sb.execute("print(2)").output == "2\n"
     finally:
         sb.close()
+
+def test_output_is_truncated(sandbox):
+    res = sandbox.execute("print('a' * 50_000)")
+    assert len(res.output) < 11_000
+    assert "output truncated" in res.output
+    assert res.notices
+    assert res.output.rstrip().endswith("a")
+
+@pytest.mark.parametrize("code, exc", [
+    ("raise SystemExit", SystemExit),
+    ("raise KeyboardInterrupt", KeyboardInterrupt),
+])
+def test_control_exceptions_reach_caller(code, exc):
+    sb = Sandbox(SandboxConfig(), None)
+    sb.start()
+    try:
+        sb.execute("x = 1")
+        with pytest.raises(exc):
+            sb.execute(code)
+        assert sb.execute("print(x)").output == "1\n"
+    finally:
+        sb.close()
