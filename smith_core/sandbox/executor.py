@@ -1,6 +1,7 @@
 """Secure sandbox executing LLM-generated code."""
 import multiprocessing as mp
 import sys
+import time
 from typing import Any, Optional
 
 from smith_core.models import ExecResult, SandboxConfig
@@ -96,25 +97,26 @@ class Sandbox:
         self._mcp = mcp
         self._conn = None
         self._proc = None
+        self._tool_specs: dict[str, list[str]] = {}
 
     def start(self) -> None:
-        """Start the child process and connect the MCP client."""
-        tool_specs = {}
+        """Connect the MCP client once, then start the child."""
         if self._mcp is not None:
             self._mcp.connect()
             for tool in self._mcp.tools:
                 properties = tool.inputSchema.get("properties", {})
-                tool_specs[tool.name] = list(properties)
+                self._tool_specs[tool.name] = list(properties)
+        self._spawn()
 
+    def _spawn(self) -> None:
+        """Start a fresh child process (also used to restart it)."""
         ctx = mp.get_context("spawn")
         self._conn, child_conn = ctx.Pipe()
         self._proc = ctx.Process(target=_worker,
-                                args=(
-                                    child_conn,
-                                    tool_specs,
+                                args=(child_conn,
+                                    self._tool_specs,
                                     self._config.authorized_imports,
-                                    self._config.allowed_directories,
-                                ),
+                                    self._config.allowed_directories),
                                 daemon=True)
         self._proc.start()
 
@@ -122,14 +124,21 @@ class Sandbox:
         """Run code in the persistent namespace."""
         self._conn.send({"type": "exec", "code": code})
         chunks = []
+        deadline = time.monotonic() + self._config.max_execution_time_seconds
+
         while True:
+            remaining = deadline - time.monotonic()
+            if not self._conn.poll(max(remaining, 0)):
+                return self._on_timeout(chunks)
             msg = self._conn.recv()
 
             if msg["type"] == "stdout":
                 chunks.append(msg["data"])
 
             elif msg["type"] == "tool":
+                started = time.monotonic()
                 self._conn.send(self._run_tool(msg["name"], msg["kwargs"]))
+                deadline += time.monotonic() - started
 
             elif msg["type"] == "done":
                 output = "".join(chunks)
@@ -139,6 +148,22 @@ class Sandbox:
                     output += f"ERROR: {msg['error']}"
                 return ExecResult(output=output,
                                 final_answer=msg["final"])
+
+    def _on_timeout(self, chunks: list[str]) -> ExecResult:
+        """Kill the stuck child, start a fresh one, return partial output."""
+        limit = self._config.max_execution_time_seconds
+        self._proc.kill()
+        self._proc.join()
+        self._conn.close()
+        self._spawn()
+        return ExecResult(
+            output="".join(chunks),
+            timed_out=True,
+            notices=[
+                f"Execution exceeded {limit}s and was stopped. "
+                "Output above is partial.",
+                "The sandbox was restarted: all variables were reset.",
+            ])
 
     def _run_tool(self, name: str, kwargs: dict) -> dict:
         """Call the MCP tool for the child and build the reply message."""

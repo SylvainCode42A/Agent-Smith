@@ -78,6 +78,8 @@ def repl(sandbox: Sandbox) -> None:
         result = sandbox.execute(code)
         if result.output:
             print(result.output.rstrip("\n"))
+        for notice in result.notices:
+            print(f"[NOTICE] {notice}")        
         if result.final_answer is not None:
             print(f"FINAL ANSWER: {result.final_answer}")
 
