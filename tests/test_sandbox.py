@@ -1,5 +1,6 @@
 import pytest
 import os
+import time
 
 from smith_core.models import SandboxConfig
 from smith_core.sandbox.executor import Sandbox
@@ -148,3 +149,20 @@ def open_sandbox():
 ])
 def test_hook_blocks_even_if_import_allowed(open_sandbox, code):
     assert "PermissionError" in open_sandbox.execute(code).output
+
+# ---------- timeout ----------
+def test_timeout_partial_output_and_restart():
+    sb = Sandbox(SandboxConfig(max_execution_time_seconds=2), None)
+    sb.start()
+    try:
+        sb.execute("x = 1")
+        started = time.monotonic()
+        res = sb.execute("print('a')\nwhile True: pass")
+        assert time.monotonic() - started < 5
+        assert res.timed_out is True
+        assert res.output == "a\n"
+        assert res.notices
+        assert "NameError" in sb.execute("print(x)").output
+        assert sb.execute("print(1 + 1)").output == "2\n"
+    finally:
+        sb.close()
