@@ -1,5 +1,6 @@
 import pytest
 import os
+import sys
 import time
 
 from smith_core.models import SandboxConfig
@@ -164,5 +165,29 @@ def test_timeout_partial_output_and_restart():
         assert res.notices
         assert "NameError" in sb.execute("print(x)").output
         assert sb.execute("print(1 + 1)").output == "2\n"
+    finally:
+        sb.close()
+
+def test_crash_is_reported_and_sandbox_restarts():
+    sb = Sandbox(SandboxConfig(authorized_imports=["os"]), None)
+    sb.start()
+    try:
+        sb.execute("x = 1")
+        res = sb.execute("import os; os._exit(3)")
+        assert any("crashed" in n for n in res.notices)
+        assert "NameError" in sb.execute("print(x)").output
+        assert sb.execute("print(2)").output == "2\n"
+    finally:
+        sb.close()
+
+@pytest.mark.skipif(sys.platform == "darwin",
+                    reason="RLIMIT_AS is not enforced on macOS")
+def test_memory_limit():
+    sb = Sandbox(SandboxConfig(max_memory_mb=256), None)
+    sb.start()
+    try:
+        out = sb.execute("x = 'a' * (1024 ** 3)").output
+        assert "MemoryError" in out
+        assert sb.execute("print(2)").output == "2\n"
     finally:
         sb.close()

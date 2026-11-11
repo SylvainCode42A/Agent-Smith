@@ -54,10 +54,21 @@ def _make_tool_wrapper(conn, name: str, params: list[str]):
     return tool
 
 
+def _limit_memory(max_memory_mb: int) -> None:
+    """Cap the child's address space (enforced on Linux, ignored on macOS)."""
+    try:
+        import resource
+        limit = max_memory_mb * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    except (ImportError, ValueError, OSError):
+        pass
+
 def _worker(conn, tool_specs: dict[str, list[str]],
             authorized_imports: list[str],
-            allowed_dirs: list[str]) -> None:
+            allowed_dirs: list[str],
+            max_memory_mb: int) -> None:
     """Body of the child process: wait for code, run it, report back."""
+    _limit_memory(max_memory_mb)
     sys.stdout = _PipeStdout(conn)
     safe_builtins = build_safe_builtins(authorized_imports, allowed_dirs)
     namespace = {"__builtins__": safe_builtins,
@@ -82,6 +93,11 @@ def _worker(conn, tool_specs: dict[str, list[str]],
         except FinalAnswer as answer:
             conn.send({"type": "done", "final": str(answer.value),
                     "error": None})
+
+        except MemoryError:
+            conn.send({"type": "done", "final": None,
+                        "error": f"MemoryError: exceeded the "
+                                f"{max_memory_mb} MB memory limit"})
 
         except Exception as error:
             conn.send({"type": "done", "final": None,
@@ -116,21 +132,36 @@ class Sandbox:
                                 args=(child_conn,
                                     self._tool_specs,
                                     self._config.authorized_imports,
-                                    self._config.allowed_directories),
+                                    self._config.allowed_directories,
+                                    self._config.max_memory_mb),
                                 daemon=True)
         self._proc.start()
 
+    def _restart(self) -> None:
+        """Kill the child if needed and start a fresh one."""
+        if self._proc.is_alive():
+            self._proc.kill()
+        self._proc.join()
+        self._conn.close()
+        self._spawn()
+
     def execute(self, code: str) -> ExecResult:
         """Run code in the persistent namespace."""
-        self._conn.send({"type": "exec", "code": code})
         chunks = []
+        try:
+            self._conn.send({"type": "exec", "code": code})
+        except (BrokenPipeError, OSError):
+            return self._on_crash(chunks)
         deadline = time.monotonic() + self._config.max_execution_time_seconds
 
         while True:
             remaining = deadline - time.monotonic()
-            if not self._conn.poll(max(remaining, 0)):
-                return self._on_timeout(chunks)
-            msg = self._conn.recv()
+            try:
+                if not self._conn.poll(max(remaining, 0)):
+                    return self._on_timeout(chunks)
+                msg = self._conn.recv()
+            except (EOFError, OSError):
+                return self._on_crash(chunks)
 
             if msg["type"] == "stdout":
                 chunks.append(msg["data"])
@@ -152,10 +183,7 @@ class Sandbox:
     def _on_timeout(self, chunks: list[str]) -> ExecResult:
         """Kill the stuck child, start a fresh one, return partial output."""
         limit = self._config.max_execution_time_seconds
-        self._proc.kill()
-        self._proc.join()
-        self._conn.close()
-        self._spawn()
+        self._restart()
         return ExecResult(
             output="".join(chunks),
             timed_out=True,
@@ -164,6 +192,16 @@ class Sandbox:
                 "Output above is partial.",
                 "The sandbox was restarted: all variables were reset.",
             ])
+
+    def _on_crash(self, chunks: list[str]) -> ExecResult:
+        """The child died by itself: restart it and tell the LLM."""
+        self._proc.join(timeout=1)
+        code = self._proc.exitcode
+        self._restart()
+        return ExecResult(
+            output="".join(chunks),
+            notices=[f"The sandbox process crashed (exit code {code}).",
+                    "The sandbox was restarted: all variables were reset."])
 
     def _run_tool(self, name: str, kwargs: dict) -> dict:
         """Call the MCP tool for the child and build the reply message."""
@@ -184,7 +222,10 @@ class Sandbox:
     def close(self) -> None:
         """Kill the child process and close the MCP client."""
         if self._proc is not None:
-            self._conn.send({"type": "stop"})
+            try:
+                self._conn.send({"type": "stop"})
+            except (BrokenPipeError, OSError):
+                pass
             self._proc.join(timeout=3)
             if self._proc.is_alive():
                 self._proc.kill()
