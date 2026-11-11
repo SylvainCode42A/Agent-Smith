@@ -1,4 +1,5 @@
 import pytest
+import os
 
 from smith_core.models import SandboxConfig
 from smith_core.sandbox.executor import Sandbox
@@ -64,7 +65,6 @@ def test_fromlist_submodule_blocked():
     "eval('1 + 1')",
     "exec('x = 1')",
     "compile('1', 'f', 'eval')",
-    "open('/etc/passwd')",
     "globals()",
     "vars()",
 ])
@@ -101,3 +101,50 @@ def test_dunder_blocked_by_getattr(sandbox, code):
 ])
 def test_safe_code_still_works(sandbox, code):
     assert "ERROR" not in sandbox.execute(code).output
+
+# ---------- files ----------
+@pytest.mark.parametrize("code", [
+    "open('/etc/passwd')",
+    "open('/tmp/agent/../../etc/passwd')",
+    "open('/tmp/agent_evil/x', 'w')",
+    "open(3)",
+])
+def test_open_blocked(sandbox, code):
+    assert "PermissionError" in sandbox.execute(code).output
+
+
+def test_open_allowed_dir(sandbox):
+    os.makedirs("/tmp/agent", exist_ok=True)
+    code = ("open('/tmp/agent/t.txt', 'w').write('ok')\n"
+            "print(open('/tmp/agent/t.txt').read())")
+    assert sandbox.execute(code).output == "ok\n"
+
+
+# ---------- audit hook: even through allowed modules ----------
+@pytest.mark.parametrize("code", [
+    "import random; random._os.system('echo PIRATE')",
+    "import typing; typing.sys.modules['os'].system('echo PIRATE')",
+])
+def test_hidden_os_blocked(sandbox, code):
+    assert "PermissionError" in sandbox.execute(code).output
+
+
+# ---------- audit hook: config that allows dangerous modules ----------
+@pytest.fixture(scope="module")
+def open_sandbox():
+    imports = SandboxConfig().authorized_imports + ["os", "socket",
+                                                    "subprocess"]
+    sb = Sandbox(SandboxConfig(authorized_imports=imports), None)
+    sb.start()
+    yield sb
+    sb.close()
+
+
+@pytest.mark.parametrize("code", [
+    "import os; os.system('ls')",
+    "import os; os.open('/etc/passwd', 0)",
+    "import subprocess; subprocess.run(['ls'])",
+    "import socket; socket.create_connection(('1.1.1.1', 80), timeout=2)",
+])
+def test_hook_blocks_even_if_import_allowed(open_sandbox, code):
+    assert "PermissionError" in open_sandbox.execute(code).output
