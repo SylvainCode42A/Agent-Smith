@@ -2,15 +2,22 @@
 import builtins
 import types
 import ast
+import os
+import sys
 
 BLOCKED_BUILTINS = {
     "eval", "exec", "compile",
-    "open",
     "input", "breakpoint",
     "globals", "locals", "vars",
     "help", "exit", "quit",
     "copyright", "credits", "license",
 }
+
+BLOCKED_EVENTS = ("socket.", "subprocess.", "os.system", "os.exec",
+                "os.spawn", "os.posix_spawn", "os.fork", "os.forkpty",
+                "os.kill", "os.killpg", "pty.spawn", "ctypes.")
+
+WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
 
 
 def is_import_allowed(name: str, allowed: list[str]) -> bool:
@@ -61,7 +68,8 @@ def make_guarded_import(allowed: list[str]):
     return guarded_import
 
 
-def build_safe_builtins(allowed_imports: list[str]) -> dict:
+def build_safe_builtins(allowed_imports: list[str],
+                        allowed_dirs: list[str]) -> dict:
     """Copy of the builtins with dangerous entries removed or replaced."""
     safe = dict(builtins.__dict__)
 
@@ -71,6 +79,7 @@ def build_safe_builtins(allowed_imports: list[str]) -> dict:
 
     safe["__import__"] = make_guarded_import(allowed_imports)
     safe["getattr"] = safe_getattr
+    safe["open"] = make_safe_open(allowed_dirs)
     return safe
 
 
@@ -105,3 +114,58 @@ def check_ast(code: str) -> None:
         if (isinstance(node, ast.Name) and _is_dunder(node.id)
                 and node.id not in ALLOWED_DUNDER_NAMES):
             raise SecurityError(f"Use of name '{node.id}' is not allowed")
+
+
+def is_path_allowed(path: str, allowed_dirs: list[str]) -> bool:
+    """True if `path` is inside one of the allowed directories."""
+    real = os.path.realpath(path)
+    for directory in allowed_dirs:
+        base = os.path.realpath(directory)
+
+        if real == base or real.startswith(f"{base}{os.sep}"):
+            return True
+    return False
+
+
+def make_safe_open(allowed_dirs: list[str]):
+    """Build an open() replacement limited to the allowed directories."""
+    real_open = builtins.open
+
+    def safe_open(file, mode="r", *args, **kwargs):
+        if isinstance(file, int):
+            raise PermissionError("Opening file descriptors is not allowed")
+        if not is_path_allowed(file, allowed_dirs):
+            raise PermissionError(
+                f"Access to '{file}' is not allowed. "
+                f"Allowed directories: {', '.join(allowed_dirs)}")
+        return real_open(file, mode, *args, **kwargs)
+
+    return safe_open
+
+def _is_read_only(mode, flags) -> bool:
+    """True if an 'open' audit event only reads the file."""
+    if isinstance(mode, str):
+        return not any(c in mode for c in "wax+")
+    return not (flags or 0) & WRITE_FLAGS
+
+
+def make_audit_hook(allowed_dirs: list[str]):
+    """Build the hook that blocks files, network and processes."""
+    python_dirs = [sys.prefix, sys.base_prefix, sys.exec_prefix]
+
+    def hook(event, args):
+        if event == "open":
+            path, mode, flags = args
+            if path is None or isinstance(path, int):
+                return
+            path = os.fsdecode(path)
+            if is_path_allowed(path, allowed_dirs):
+                return
+            if _is_read_only(mode, flags) and is_path_allowed(path, python_dirs):
+                return
+            raise PermissionError(f"Access to '{path}' is not allowed")
+
+        if event.startswith(BLOCKED_EVENTS):
+            raise PermissionError(f"'{event}' is not allowed in the sandbox")
+
+    return hook

@@ -1,5 +1,4 @@
 """Secure sandbox executing LLM-generated code."""
-import builtins
 import multiprocessing as mp
 import sys
 from typing import Any, Optional
@@ -7,7 +6,9 @@ from typing import Any, Optional
 from smith_core.models import ExecResult, SandboxConfig
 from smith_core.sandbox.mcp_client import McpClient
 from smith_core.sandbox.manual import build_manual
-from smith_core.sandbox.security import build_safe_builtins, check_ast
+from smith_core.sandbox.security import (build_safe_builtins,
+                                        check_ast,
+                                        make_audit_hook)
 
 
 class FinalAnswer(BaseException):
@@ -52,14 +53,19 @@ def _make_tool_wrapper(conn, name: str, params: list[str]):
     return tool
 
 
-def _worker(conn, tool_specs: dict[str, list[str]], authorized_imports: list[str]) -> None:
+def _worker(conn, tool_specs: dict[str, list[str]],
+            authorized_imports: list[str],
+            allowed_dirs: list[str]) -> None:
     """Body of the child process: wait for code, run it, report back."""
     sys.stdout = _PipeStdout(conn)
-    safe_builtins = build_safe_builtins(authorized_imports)
+    safe_builtins = build_safe_builtins(authorized_imports, allowed_dirs)
     namespace = {"__builtins__": safe_builtins,
+                "__name__": "__main__",
                 "final_answer": _final_answer}
     for name, params in tool_specs.items():
         namespace[name] = _make_tool_wrapper(conn, name, params)
+
+    sys.addaudithook(make_audit_hook(allowed_dirs))
 
     while True:
         msg = conn.recv()
@@ -106,7 +112,8 @@ class Sandbox:
                                 args=(
                                     child_conn,
                                     tool_specs,
-                                    self._config.authorized_imports
+                                    self._config.authorized_imports,
+                                    self._config.allowed_directories,
                                 ),
                                 daemon=True)
         self._proc.start()
