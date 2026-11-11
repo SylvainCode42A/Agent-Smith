@@ -11,6 +11,8 @@ from smith_core.sandbox.security import (build_safe_builtins,
                                         check_ast,
                                         make_audit_hook)
 
+MAX_OUTPUT_CHARS = 10_000
+
 
 class FinalAnswer(BaseException):
     """Raised by final_answer() to stop the code and carry the answer."""
@@ -92,7 +94,11 @@ def _worker(conn, tool_specs: dict[str, list[str]],
 
         except FinalAnswer as answer:
             conn.send({"type": "done", "final": str(answer.value),
-                    "error": None})
+                        "error": None})
+
+        except (SystemExit, KeyboardInterrupt) as error:
+            conn.send({"type": "done", "final": None, "error": None,
+                        "control": type(error).__name__})
 
         except MemoryError:
             conn.send({"type": "done", "final": None,
@@ -101,8 +107,20 @@ def _worker(conn, tool_specs: dict[str, list[str]],
 
         except Exception as error:
             conn.send({"type": "done", "final": None,
-                    "error": f"{type(error).__name__}: {error}"})
+                        "error": f"{type(error).__name__}: {error}"})
 
+def _truncate(text: str) -> tuple[str, list[str]]:
+    """Keep the head and tail of a too long output, with a notice."""
+    if len(text) <= MAX_OUTPUT_CHARS:
+        return text, []
+    omitted = len(text) - MAX_OUTPUT_CHARS
+    half = MAX_OUTPUT_CHARS // 2
+    head = text[:half]
+    tail = text[-half:] 
+    marker = f"\n[... output truncated: {omitted} chars omitted ...]\n"
+    return (head + marker + tail,
+            [f"Output was truncated to {MAX_OUTPUT_CHARS} characters "
+                f"({omitted} omitted)."])
 
 class Sandbox:
     """Runs code in a child process with the configured restrictions."""
@@ -172,22 +190,31 @@ class Sandbox:
                 deadline += time.monotonic() - started
 
             elif msg["type"] == "done":
+                control = msg.get("control")
+                if control == "KeyboardInterrupt":
+                    raise KeyboardInterrupt
+                if control == "SystemExit":
+                    raise SystemExit("SystemExit raised by sandboxed code")
                 output = "".join(chunks)
                 if msg["error"] is not None:
                     if output and not output.endswith("\n"):
                         output += "\n"
                     output += f"ERROR: {msg['error']}"
+
+                output, notices = _truncate(output)
                 return ExecResult(output=output,
-                                final_answer=msg["final"])
+                                final_answer=msg["final"],
+                                notices=notices)
 
     def _on_timeout(self, chunks: list[str]) -> ExecResult:
         """Kill the stuck child, start a fresh one, return partial output."""
         limit = self._config.max_execution_time_seconds
         self._restart()
+        output, notices = _truncate("".join(chunks))
         return ExecResult(
-            output="".join(chunks),
+            output=output,
             timed_out=True,
-            notices=[
+            notices=notices + [
                 f"Execution exceeded {limit}s and was stopped. "
                 "Output above is partial.",
                 "The sandbox was restarted: all variables were reset.",
