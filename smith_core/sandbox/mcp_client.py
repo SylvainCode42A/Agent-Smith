@@ -1,4 +1,4 @@
-"""Synchronous MCP client (stdio) used by the sandbox."""
+"""Synchronous MCP client (stdio or streamable HTTP) used by the sandbox."""
 import asyncio
 import os
 import shlex
@@ -7,13 +7,14 @@ from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
 
 
 class McpClient:
     """Keeps one MCP session open in a background asyncio thread."""
 
-    def __init__(self, params: StdioServerParameters) -> None:
-        self._params = params
+    def __init__(self, open_transport) -> None:
+        self._open_transport = open_transport
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._session: ClientSession | None = None
@@ -31,7 +32,12 @@ class McpClient:
             args=parts[1:],
             env=dict(os.environ),
         )
-        return cls(params)
+        return cls(lambda: stdio_client(params))
+
+    @classmethod
+    def from_http(cls, url: str) -> "McpClient":
+        """Build a client for a streamable HTTP server, e.g. http://…/mcp."""
+        return cls(lambda: streamable_http_client(url))
 
     def connect(self, timeout: float = 30) -> None:
         """Start the background thread and wait until the session is ready."""
@@ -51,7 +57,8 @@ class McpClient:
         """Runs inside the thread: open the session, then wait for close()."""
         self._stop = asyncio.Event()
         try:
-            async with stdio_client(self._params) as (read, write):
+            async with self._open_transport() as streams:
+                read, write = streams[0], streams[1]
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     self._session = session

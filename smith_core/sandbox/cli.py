@@ -75,7 +75,11 @@ def repl(sandbox: Sandbox) -> None:
         if not code.strip():
             continue
 
-        result = sandbox.execute(code)
+        try:
+            result = sandbox.execute(code)
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt")
+            continue                              
         if result.output:
             print(result.output.rstrip("\n"))
         for notice in result.notices:
@@ -89,13 +93,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
     config = load_config(args.config)
 
-    if args.mcp_server is not None:
-        print("--mcp-server is not supported yet (HTTP comes in phase 2).",
-            file=sys.stderr)
-        return 1
-
     mcp = None
-    if args.mcp_stdio is not None:
+    if args.mcp_server is not None:
+        mcp = McpClient.from_http(args.mcp_server)
+    elif args.mcp_stdio is not None:
         mcp = McpClient.from_stdio(args.mcp_stdio)
 
     sandbox = Sandbox(config, mcp)
