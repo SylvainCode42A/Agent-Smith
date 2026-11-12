@@ -2,10 +2,12 @@ import pytest
 import os
 import sys
 import time
+import subprocess
 
 from smith_core.models import SandboxConfig
 from smith_core.sandbox.executor import Sandbox
 from smith_core.sandbox.security import is_import_allowed
+from smith_core.sandbox.mcp_client import McpClient
 
 
 @pytest.fixture(scope="module")
@@ -213,3 +215,34 @@ def test_control_exceptions_reach_caller(code, exc):
         assert sb.execute("print(x)").output == "1\n"
     finally:
         sb.close()
+
+PORT = 8765                                  # not 8000: avoid clashes
+
+
+@pytest.fixture(scope="module")
+def http_server():
+    proc = subprocess.Popen(
+        [sys.executable, "mcp_tools_mbpp.py", "--http", "--port", str(PORT)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(3)                            # give the server time to start
+    yield f"http://127.0.0.1:{PORT}/mcp"
+    proc.terminate()
+    proc.wait(timeout=5)
+
+
+def test_http_connect_and_call(http_server):
+    client = McpClient.from_http(http_server)
+    client.connect()
+    try:
+        assert [t.name for t in client.tools] == ["run_tests"]
+        out = client.call_tool("run_tests", {"code": "def f(): return 1",
+                                            "test_list": ["assert f()==1"]})
+        assert '"success": true' in out
+    finally:
+        client.close()
+
+
+def test_http_bad_url_fails_cleanly():
+    client = McpClient.from_http("http://127.0.0.1:9/mcp")
+    with pytest.raises(RuntimeError):
+        client.connect(timeout=10)
