@@ -1,6 +1,7 @@
 """MCP server exposing the MBPP tools.
 
-Run with:  python mcp_tools_mbpp.py   (stdio transport)
+Run with:  python mcp_tools_mbpp.py          (stdio transport)
+            python mcp_tools_mbpp.py --http   (streamable HTTP on :8000/mcp)
 """
 import json
 import subprocess
@@ -83,6 +84,31 @@ def run_tests(code: str, test_list: list[str]) -> str:
     output = _truncate(proc.stdout + proc.stderr)
     return json.dumps({"success": proc.returncode == 0, "output": output})
 
+@mcp.resource("mbpp://guide")
+def guide() -> str:
+    """How to solve an MBPP task with these tools."""
+    return ("1. Write the function.\n"
+            "2. Check it with run_tests(code, test_list).\n"
+            "3. Fix it until success is true.\n"
+            "4. Call final_answer(code).")
+
+@mcp.prompt()
+def solve_task(task: str) -> str:
+    """Instruction to solve one MBPP task."""
+    return (f"Solve this task in Python: {task}\n"
+            "Test your function with run_tests before final_answer.")
 
 if __name__ == "__main__":
-    mcp.run()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MBPP MCP server")
+    parser.add_argument("--http", action="store_true",
+                        help="serve over streamable HTTP instead of stdio")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+
+    if args.http:
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")    # → http://127.0.0.1:8000/mcp
+    else:
+        mcp.run()

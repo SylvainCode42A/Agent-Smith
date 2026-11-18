@@ -11,6 +11,8 @@ from smith_core.sandbox.security import (build_safe_builtins,
                                         check_ast,
                                         make_audit_hook)
 
+MAX_OUTPUT_CHARS = 10_000
+
 
 class FinalAnswer(BaseException):
     """Raised by final_answer() to stop the code and carry the answer."""
@@ -92,7 +94,11 @@ def _worker(conn, tool_specs: dict[str, list[str]],
 
         except FinalAnswer as answer:
             conn.send({"type": "done", "final": str(answer.value),
-                    "error": None})
+                        "error": None})
+
+        except (SystemExit, KeyboardInterrupt) as error:
+            conn.send({"type": "done", "final": None, "error": None,
+                        "control": type(error).__name__})
 
         except MemoryError:
             conn.send({"type": "done", "final": None,
@@ -101,8 +107,20 @@ def _worker(conn, tool_specs: dict[str, list[str]],
 
         except Exception as error:
             conn.send({"type": "done", "final": None,
-                    "error": f"{type(error).__name__}: {error}"})
+                        "error": f"{type(error).__name__}: {error}"})
 
+def _truncate(text: str) -> tuple[str, list[str]]:
+    """Keep the head and tail of a too long output, with a notice."""
+    if len(text) <= MAX_OUTPUT_CHARS:
+        return text, []
+    omitted = len(text) - MAX_OUTPUT_CHARS
+    half = MAX_OUTPUT_CHARS // 2
+    head = text[:half]
+    tail = text[-half:] 
+    marker = f"\n[... output truncated: {omitted} chars omitted ...]\n"
+    return (head + marker + tail,
+            [f"Output was truncated to {MAX_OUTPUT_CHARS} characters "
+                f"({omitted} omitted)."])
 
 class Sandbox:
     """Runs code in a child process with the configured restrictions."""
@@ -122,6 +140,10 @@ class Sandbox:
             for tool in self._mcp.tools:
                 properties = tool.inputSchema.get("properties", {})
                 self._tool_specs[tool.name] = list(properties)
+            if self._mcp.resources:
+                self._tool_specs["read_resource"] = ["uri"]
+            if self._mcp.prompts:
+                self._tool_specs["get_prompt"] = ["name", "arguments"]
         self._spawn()
 
     def _spawn(self) -> None:
@@ -172,22 +194,31 @@ class Sandbox:
                 deadline += time.monotonic() - started
 
             elif msg["type"] == "done":
+                control = msg.get("control")
+                if control == "KeyboardInterrupt":
+                    raise KeyboardInterrupt
+                if control == "SystemExit":
+                    raise SystemExit("SystemExit raised by sandboxed code")
                 output = "".join(chunks)
                 if msg["error"] is not None:
                     if output and not output.endswith("\n"):
                         output += "\n"
                     output += f"ERROR: {msg['error']}"
+
+                output, notices = _truncate(output)
                 return ExecResult(output=output,
-                                final_answer=msg["final"])
+                                final_answer=msg["final"],
+                                notices=notices)
 
     def _on_timeout(self, chunks: list[str]) -> ExecResult:
         """Kill the stuck child, start a fresh one, return partial output."""
         limit = self._config.max_execution_time_seconds
         self._restart()
+        output, notices = _truncate("".join(chunks))
         return ExecResult(
-            output="".join(chunks),
+            output=output,
             timed_out=True,
-            notices=[
+            notices=notices + [
                 f"Execution exceeded {limit}s and was stopped. "
                 "Output above is partial.",
                 "The sandbox was restarted: all variables were reset.",
@@ -209,15 +240,23 @@ class Sandbox:
             return {"type": "tool_result", "ok": False,
                     "value": "No MCP server connected"}
         try:
-            value = self._mcp.call_tool(name, kwargs)
+            if name == "read_resource":
+                value = self._mcp.read_resource(kwargs["uri"])
+            elif name == "get_prompt":
+                value = self._mcp.get_prompt(kwargs["name"],
+                                            kwargs.get("arguments", {}))
+            else:
+                value = self._mcp.call_tool(name, kwargs)
             return {"type": "tool_result", "ok": True, "value": value}
         except Exception as error:
             return {"type": "tool_result", "ok": False, "value": str(error)}
 
     def manual(self) -> str:
         """Return the tool manual to put in the prompt."""
-        tools = self._mcp.tools if self._mcp is not None else []
-        return build_manual(tools, self._config)
+        if self._mcp is None:
+            return build_manual([], self._config)
+        return build_manual(self._mcp.tools, self._config,
+                            self._mcp.resources, self._mcp.prompts)
 
     def close(self) -> None:
         """Kill the child process and close the MCP client."""
