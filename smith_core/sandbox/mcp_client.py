@@ -9,6 +9,13 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
+async def _list_or_empty(request, field: str) -> list:
+    """Run a list_* request; a server that does not support it gives []."""
+    try:
+        result = await request
+    except Exception:
+        return []
+    return getattr(result, field)
 
 class McpClient:
     """Keeps one MCP session open in a background asyncio thread."""
@@ -22,6 +29,8 @@ class McpClient:
         self._stop: asyncio.Event | None = None
         self._error: Exception | None = None
         self.tools: list = []
+        self.resources: list = []
+        self.prompts: list = []
 
     @classmethod
     def from_stdio(cls, command: str) -> "McpClient":
@@ -63,6 +72,11 @@ class McpClient:
                     await session.initialize()
                     self._session = session
                     self.tools = (await session.list_tools()).tools
+                    self.resources = await _list_or_empty(
+                        session.list_resources(), "resources")
+                    self.prompts = await _list_or_empty(
+                        session.list_prompts(), "prompts")
+                    self._ready.set()
                     self._ready.set()
                     await self._stop.wait()
         except Exception as error:
@@ -81,6 +95,27 @@ class McpClient:
         if result.isError:
             raise RuntimeError(text)
         return text
+
+    def read_resource(self, uri: str, timeout: float = 60) -> str:
+        """Read a resource synchronously and return its text."""
+        if self._session is None or self._loop is None:
+            raise RuntimeError("McpClient is not connected")
+        future = asyncio.run_coroutine_threadsafe(
+            self._session.read_resource(uri), self._loop)
+        result = future.result(timeout)
+        return "\n".join(c.text for c in result.contents
+                        if hasattr(c, "text"))
+
+    def get_prompt(self, name: str, arguments: dict[str, str],
+                    timeout: float = 60) -> str:
+        """Fill a prompt synchronously and return its text."""
+        if self._session is None or self._loop is None:
+            raise RuntimeError("McpClient is not connected")
+        future = asyncio.run_coroutine_threadsafe(
+            self._session.get_prompt(name, arguments), self._loop)
+        result = future.result(timeout)
+        return "\n".join(m.content.text for m in result.messages
+                if m.content.type == "text")
 
     def close(self) -> None:
         """Ask the background loop to stop and wait for the thread."""

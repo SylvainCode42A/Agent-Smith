@@ -29,7 +29,8 @@ def first_line(text: str) -> str:
     return ""
 
 
-def build_manual(tools: list, config: SandboxConfig) -> str:
+def build_manual(tools: list, config: SandboxConfig,
+                resources: list = (), prompts: list = ()) -> str:
     """Full manual: one entry per MCP tool, final_answer, and the rules."""
     lines = ["Available functions (call them directly in your Python code):"]
     for tool in tools:
@@ -37,6 +38,21 @@ def build_manual(tools: list, config: SandboxConfig) -> str:
         lines.append(f"    {first_line(tool.description or '')}")
     lines.append("- final_answer(answer: str) -> None")
     lines.append("    Submit your final answer and stop.")
+
+    if resources:
+        lines.append("")
+        lines.append("Resources (read them with read_resource(uri) -> str):")
+        for resource in resources:
+            lines.append(f"- {resource.uri}  {resource.description or ''}")
+
+    if prompts:
+        lines.append("")
+        lines.append("Prompts (get them with get_prompt(name, arguments)"
+                " -> str, arguments is a dict):")
+        for prompt in prompts:
+            args = ", ".join(arg.name for arg in prompt.arguments or [])
+            lines.append(f"- {prompt.name}({args})  {prompt.description or ''}")
+
     lines.append("")
     lines.append("Always print() the values you want to see.")
     lines.append(f"Allowed import : {', '.join(config.authorized_imports)}")
