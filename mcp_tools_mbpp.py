@@ -84,6 +84,19 @@ def run_tests(code: str, test_list: list[str]) -> str:
     output = _truncate(proc.stdout + proc.stderr)
     return json.dumps({"success": proc.returncode == 0, "output": output})
 
+@mcp.resource("mbpp://guide")
+def guide() -> str:
+    """How to solve an MBPP task with these tools."""
+    return ("1. Write the function.\n"
+            "2. Check it with run_tests(code, test_list).\n"
+            "3. Fix it until success is true.\n"
+            "4. Call final_answer(code).")
+
+@mcp.prompt()
+def solve_task(task: str) -> str:
+    """Instruction to solve one MBPP task."""
+    return (f"Solve this task in Python: {task}\n"
+            "Test your function with run_tests before final_answer.")
 
 if __name__ == "__main__":
     import argparse

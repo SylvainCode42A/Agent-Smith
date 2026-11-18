@@ -140,6 +140,10 @@ class Sandbox:
             for tool in self._mcp.tools:
                 properties = tool.inputSchema.get("properties", {})
                 self._tool_specs[tool.name] = list(properties)
+            if self._mcp.resources:
+                self._tool_specs["read_resource"] = ["uri"]
+            if self._mcp.prompts:
+                self._tool_specs["get_prompt"] = ["name", "arguments"]
         self._spawn()
 
     def _spawn(self) -> None:
@@ -236,15 +240,23 @@ class Sandbox:
             return {"type": "tool_result", "ok": False,
                     "value": "No MCP server connected"}
         try:
-            value = self._mcp.call_tool(name, kwargs)
+            if name == "read_resource":
+                value = self._mcp.read_resource(kwargs["uri"])
+            elif name == "get_prompt":
+                value = self._mcp.get_prompt(kwargs["name"],
+                                            kwargs.get("arguments", {}))
+            else:
+                value = self._mcp.call_tool(name, kwargs)
             return {"type": "tool_result", "ok": True, "value": value}
         except Exception as error:
             return {"type": "tool_result", "ok": False, "value": str(error)}
 
     def manual(self) -> str:
         """Return the tool manual to put in the prompt."""
-        tools = self._mcp.tools if self._mcp is not None else []
-        return build_manual(tools, self._config)
+        if self._mcp is None:
+            return build_manual([], self._config)
+        return build_manual(self._mcp.tools, self._config,
+                            self._mcp.resources, self._mcp.prompts)
 
     def close(self) -> None:
         """Kill the child process and close the MCP client."""
