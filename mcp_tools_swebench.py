@@ -1,7 +1,7 @@
 """MCP server exposing the SWE-bench tools.
 
-Run with:  TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py          (stdio)
-            TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py --http   (HTTP)
+Run with:  TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py      (stdio)
+         TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py --http (HTTP)
 """
 import os
 import subprocess
@@ -20,6 +20,9 @@ TESTS_TIMEOUT_S = 600
 # Name of the SWE-bench container. Empty: run locally (TESTBED_PATH).
 CONTAINER = os.environ.get("SWEBENCH_CONTAINER", "")
 CONDA = ". /opt/miniconda3/bin/activate testbed 2>/dev/null; "
+# Title to truncate stdout's output for Agent
+START_MARK = ">>>>> Start Test Output"
+END_MARK = ">>>>> End Test Output"
 
 mcp = FastMCP("swebench-tools")
 
@@ -187,16 +190,17 @@ def read_file(filepath: str, start_line: int = 1,
 
 
 @mcp.tool()
-def search_code(pattern: str, file_pattern: str = "*.py") -> str:
-    """Search a regex in all files whose NAME matches file_pattern
-    (a glob like '*.py', not a directory), inside the directory path.
+def search_code(pattern: str, path: str = ".",
+                file_pattern: str = "*.py") -> str:
+    """Search a regex in the files under path (a directory or a file)
+    whose name matches file_pattern.
 
     Returns:
         One match per line: '/absolute/path:<line> <content>'.
     """
-    command = (f"grep -rnIE --exclude-dir=.git "
+    command = (f"grep -rnHIE --exclude-dir=.git "
                f"--include={shlex.quote(file_pattern)} "
-               f"-e {shlex.quote(pattern)} {shlex.quote(_abs(path)}")
+               f"-e {shlex.quote(pattern)} {shlex.quote(_abs(path))}")
     code, out, err = _sh(command)
     if code == 1:
         return "No matches found."
@@ -240,7 +244,7 @@ def find_references(name: str, filepath: str, line: int) -> str:
         return f"Error: '{name}' not found at {filepath}:{line}"
 
     # 2. search every whole-word occurrence in the repository
-    command = (f"grep -rnIwF --exclude-dir=.git --include='*.py' "
+    command = (f"grep -rnHIwF --exclude-dir=.git --include='*.py' "
                f"-e {shlex.quote(name)} {shlex.quote(TESTBED)}")
     code, out, err = _sh(command)
     if code == 1:
@@ -290,23 +294,30 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> str:
     return f"Edited {filepath} at line {line}."
 
 
+def _test_section(out: str) -> str:
+    """Only the part between the SWE-bench markers, if they are there."""
+    start = out.find(START_MARK)
+    end = out.find(END_MARK)
+    if start == -1 or end < start:
+        return out
+    return out[start + len(START_MARK):end].strip()
+
+
 @mcp.tool()
 def run_tests() -> str:
     """Run the task's evaluation script (the official tests).
 
     Returns:
-        The exit code (0 = tests passed), then the end of the test output.
+        The test results (one line per test: ok / FAILED / ERROR).
+        Read them: the exit code alone does not tell if the fix works.
     """
     code, _, _ = _sh(f"test -f {shlex.quote(EVAL_SCRIPT)}")
     if code != 0:
         return f"Error: no eval script found at {EVAL_SCRIPT}"
 
-    code, out, err = _sh(f"bash {shlex.quote(EVAL_SCRIPT)}",
-                         timeout=TESTS_TIMEOUT_S)
-    result = (f"exit_code: {code}\n"
-              f"stdout:\n{out}\n"
-              f"stderr:\n{err}")
-    return _truncate_tail(result)
+    code, out, _ = _sh(f"bash {shlex.quote(EVAL_SCRIPT)} 2>&1",
+                       timeout=TESTS_TIMEOUT_S)
+    return _truncate_tail(f"exit_code: {code}\n" + _test_section(out))
 
 
 if __name__ == "__main__":
