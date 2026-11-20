@@ -3,7 +3,7 @@ import subprocess
 
 RUN_TIMEOUT = 300   # docker run may pull a ~4 GB image first
 EXEC_TIMEOUT = 30   # copying eval.sh
-RM_TIMEOUT = 15     # cleanup, possibly during SIGTERM
+RM_TIMEOUT = 9     # cleanup, possibly during SIGTERM (moulinette/main.py:157)
 
 
 def check(res, context):

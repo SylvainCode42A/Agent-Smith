@@ -1,15 +1,15 @@
-import argparse
 import shlex
 import sys
-from argparse import Namespace
 from pathlib import Path
 
 from agent_mbpp.fallback import last_def_solution
 from agent_mbpp.prompts_mbpp import MBPP_TEMPLATE, build_user_prompt_mbpp
 from smith_core.agent.loop import Limits, run_agent
+from smith_core.agent.runner import (parse_args, write_solution,
+                                     failed_solution)
 from smith_core.agent.prompts import build_system_prompt
 from smith_core.llm.clients import LLMClient
-from smith_core.models import MBPPTaskInput, SandboxConfig, SolutionOutput
+from smith_core.models import MBPPTaskInput, SandboxConfig
 from smith_core.sandbox.executor import Sandbox
 from smith_core.sandbox.mcp_client import McpClient
 
@@ -24,85 +24,23 @@ FALLBACK_MANUAL = (
 )
 
 
-def parse_args() -> Namespace:
-    """Function to describe the allowed flag in the CLI"""
-
-    parser = argparse.ArgumentParser(
-        description="Run the MBPP agent on one task"
-    )
-    parser.add_argument(
-        "--task-file",
-        type=Path,
-        required=True,
-        help="Path to task JSON file."
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        required=True,
-        help="Path of the solution JSON file to write."
-    )
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        required=True,
-        help="Name of the LLM model to use."
-    )
-    parser.add_argument(
-        "--provider-url",
-        type=str,
-        required=True,
-        help="Base URL of the LLM provider API."
-    )
-    parser.add_argument(
-        "--max-iterations",
-        type=int,
-        default=10,
-        help="Maximum number of agent iterations (default: 10)."
-    )
-    return parser.parse_args()
-
-
 def load_task(path: Path) -> MBPPTaskInput:
     """Read the task JSON file and return it as a MBPPTaskInput."""
 
     return MBPPTaskInput.model_validate_json(path.read_text())
 
 
-def write_solution(solution: SolutionOutput, output_path: Path) -> None:
-    """Write the solution as JSON, creating parent folders if needed."""
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(solution.model_dump_json(indent=2))
-
-
-def failed_solution(task_id, error) -> SolutionOutput:
-    """Build a valid failed SolutionOutput (all counters at zero)."""
-
-    return SolutionOutput(
-        task_id=str(task_id),
-        benchmark="mbpp",
-        success=False,
-        solution="",
-        iterations=0,
-        total_requests=0,
-        total_input_tokens=0,
-        total_output_tokens=0,
-        total_time_seconds=0.0,
-        error=f"{type(error).__name__}: {error}"
-    )
-
-
 def main() -> None:
     """Solve one MBPP task and always write a solution JSON file."""
 
-    args = parse_args()
+    args = parse_args("mbpp", 10)
     try:
         task = load_task(args.task_file)
         server = shlex.join([sys.executable, str(ROOT / "mcp_tools_mbpp.py")])
         sandbox = Sandbox(SandboxConfig(), McpClient.from_stdio(server))
     except Exception as error:
-        write_solution(failed_solution("unknown", error), args.output)
+        write_solution(failed_solution("unknown", "mbpp", error),
+                       args.output)
         return
     try:
         sandbox.start()
@@ -119,7 +57,7 @@ def main() -> None:
                                             task.function_definition),
         )
     except Exception as error:
-        solution = failed_solution(task.task_id, error)
+        solution = failed_solution(task.task_id, "mbpp", error)
     finally:
         try:
             sandbox.close()
