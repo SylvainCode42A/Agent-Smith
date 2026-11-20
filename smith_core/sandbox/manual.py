@@ -2,7 +2,7 @@
 from smith_core.models import SandboxConfig
 
 JSON_TO_PY = {"string": "str", "integer": "int", "number": "float",
-            "boolean": "bool", "array": "list", "object": "dict"}
+              "boolean": "bool", "array": "list", "object": "dict"}
 
 
 def tool_signature(tool) -> str:
@@ -30,7 +30,7 @@ def first_line(text: str) -> str:
 
 
 def build_manual(tools: list, config: SandboxConfig,
-                resources: list = (), prompts: list = ()) -> str:
+                 resources: list = (), prompts: list = ()) -> str:
     """Full manual: one entry per MCP tool, final_answer, and the rules."""
     lines = ["Available functions (call them directly in your Python code):"]
     for tool in tools:
@@ -48,10 +48,10 @@ def build_manual(tools: list, config: SandboxConfig,
     if prompts:
         lines.append("")
         lines.append("Prompts (get them with get_prompt(name, arguments)"
-                " -> str, arguments is a dict):")
+                     " -> str, arguments is a dict):")
         for prompt in prompts:
             args = ", ".join(arg.name for arg in prompt.arguments or [])
-            lines.append(f"- {prompt.name}({args})  {prompt.description or ''}")
+            lines.append(f"- {prompt.name}({args}) {prompt.description or ''}")
 
     lines.append("")
     lines.append("Always print() the values you want to see.")

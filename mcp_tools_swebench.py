@@ -54,8 +54,8 @@ def _sh(command: str, workdir: str | None = None,
         local_cwd = cwd
     try:
         proc = subprocess.run(argv, cwd=local_cwd, input=stdin,
-                            capture_output=True, text=True,
-                            timeout=timeout)
+                              capture_output=True, text=True,
+                              timeout=timeout)
     except subprocess.TimeoutExpired:
         return 124, "", f"Command timed out after {timeout}s"
     except OSError as error:
@@ -117,8 +117,8 @@ def run_command(command: str, workdir: str = ".") -> str:
         command = CONDA + command
     code, out, err = _sh(command, workdir)
     result = (f"exit_code: {code}\n"
-                f"stdout:\n{out}\n"
-                f"stderr:\n{err}")
+              f"stdout:\n{out}\n"
+              f"stderr:\n{err}")
     return _truncate(result)
 
 
@@ -143,7 +143,7 @@ def list_files(directory: str = ".", pattern: str = "*") -> str:
         One absolute path per line, sorted.
     """
     command = (f"find {shlex.quote(_abs(directory))} -type f "
-                f"-name {shlex.quote(pattern)} -not -path '*/.git/*'")
+               f"-name {shlex.quote(pattern)} -not -path '*/.git/*'")
     code, out, err = _sh(command)
     if code != 0:
         return f"Error: {err}"
@@ -155,8 +155,9 @@ def list_files(directory: str = ".", pattern: str = "*") -> str:
 
 @mcp.tool()
 def read_file(filepath: str, start_line: int = 1,
-                end_line: int | None = None) -> str:
-    """Read a file with line numbers ('<n>: <text>'), from start_line to end_line.
+              end_line: int | None = None) -> str:
+    """Read a file with line numbers ('<n>: <text>'),
+    from start_line to end_line.
 
     Returns:
         The selected lines, numbered from 1.
@@ -186,8 +187,7 @@ def read_file(filepath: str, start_line: int = 1,
 
 
 @mcp.tool()
-def search_code(pattern: str, file_pattern: str = "*.py",
-                path: str = ".") -> str:
+def search_code(pattern: str, file_pattern: str = "*.py") -> str:
     """Search a regex in all files whose NAME matches file_pattern
     (a glob like '*.py', not a directory), inside the directory path.
 
@@ -195,8 +195,8 @@ def search_code(pattern: str, file_pattern: str = "*.py",
         One match per line: '/absolute/path:<line> <content>'.
     """
     command = (f"grep -rnIE --exclude-dir=.git "
-                f"--include={shlex.quote(file_pattern)} "
-                f"-e {shlex.quote(pattern)} {shlex.quote(_abs(path))}")
+               f"--include={shlex.quote(file_pattern)} "
+               f"-e {shlex.quote(pattern)} {shlex.quote(_abs(path)}")
     code, out, err = _sh(command)
     if code == 1:
         return "No matches found."
@@ -216,7 +216,7 @@ def search_function_or_class_definition_in_code(name: str) -> str:
     if not name.isidentifier():
         return f"Error: '{name}' is not a valid Python name"
     pattern = (r"^[[:space:]]*(async[[:space:]]+)?(def|class)[[:space:]]+"
-                + name + r"([^[:alnum:]_]|$)")
+               + name + r"([^[:alnum:]_]|$)")
     return search_code(pattern)
 
 
@@ -241,7 +241,7 @@ def find_references(name: str, filepath: str, line: int) -> str:
 
     # 2. search every whole-word occurrence in the repository
     command = (f"grep -rnIwF --exclude-dir=.git --include='*.py' "
-                f"-e {shlex.quote(name)} {shlex.quote(TESTBED)}")
+               f"-e {shlex.quote(name)} {shlex.quote(TESTBED)}")
     code, out, err = _sh(command)
     if code == 1:
         return "No references found."
@@ -302,10 +302,10 @@ def run_tests() -> str:
         return f"Error: no eval script found at {EVAL_SCRIPT}"
 
     code, out, err = _sh(f"bash {shlex.quote(EVAL_SCRIPT)}",
-                        timeout=TESTS_TIMEOUT_S)
+                         timeout=TESTS_TIMEOUT_S)
     result = (f"exit_code: {code}\n"
-                f"stdout:\n{out}\n"
-                f"stderr:\n{err}")
+              f"stdout:\n{out}\n"
+              f"stderr:\n{err}")
     return _truncate_tail(result)
 
 

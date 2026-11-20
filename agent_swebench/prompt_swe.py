@@ -17,6 +17,13 @@ them inside the python block and print() what they return.
 
 {manual}
 
+IMPORTANT: every function returns a string and shows NOTHING by itself.
+Always wrap each call in print():
+    WRONG:  read_file("a.py", 1, 40)          -> you see nothing
+    RIGHT:  print(read_file("a.py", 1, 40))
+If an observation says "(no output)", you forgot print(): it does NOT
+mean the environment is broken.
+
 Method:
 1. Locate: search_code or search_function_or_class_definition_in_code.
 2. Read: read_file with start_line/end_line (about 40 lines at a time).
@@ -28,20 +35,26 @@ Method:
 
 Rules:
 - one short python block per answer, with a few calls only.
-- always print() the results, otherwise you see nothing.
 - make the smallest change that fixes the issue.
 - edit the source code only, never the tests.
 - if edit_file fails, read the file again and retry with the exact text.
 - submit only when get_patch() is not empty.
 
-Example:
+Example 1:
 Thought: I look for the class named in the issue.
 ```python
-print(search_function_or_class_definition_in_code("Vector"))
+print(search_function_or_class_definition_in_code("MyClass"))
+```<end_code>
+
+Example 2:
+Thought: I read the function found by the search.
+```python
+print(read_file("pkg/module.py", 50, 90))
 ```<end_code>""")
 
 REPLY_REMINDER = ("Reply now: one 'Thought:' line, then ONE short ```python "
-                  "block that calls the functions. Do not emit tool calls.")
+                  "block that calls the functions. Do not emit tool calls. "
+                  "Wrap every call in print().")
 
 
 def build_user_prompt_swe(task: SWEBenchTaskInput) -> str:

@@ -8,7 +8,7 @@ MIN_OUTPUT_TOKEN = 200
 OBSERVATION_MARGIN = 500
 STEP_TIME_MARGIN_S = 5
 
-# global variable for format_observation (visual preference)
+# default for Limits.max_obs_chars (MBPP outputs are short PASS/FAIL lines)
 MAX_OBS_CHARS = 2000
 
 # global variable for run_agent (visual preference)
@@ -21,6 +21,8 @@ class Limits:
     max_input_tokens: int = 6000
     max_output_tokens: int = 1500
     timeout_s: int = 100
+    # observations longer than this are cut (head + tail kept)
+    max_obs_chars: int = MAX_OBS_CHARS
 
 
 def budget_left(steps, limits: Limits, start) -> bool:
@@ -63,7 +65,7 @@ def budget_left(steps, limits: Limits, start) -> bool:
     return used_input + next_input <= limits.max_input_tokens
 
 
-def format_observation(result, notice=""):
+def format_observation(result, notice="", max_chars=MAX_OBS_CHARS):
     """
     Formats the observation based on the provided result and optional notice.
     This function takes a result object and an optional notice string, then
@@ -79,6 +81,8 @@ def format_observation(result, notice=""):
             - output (str): The output string to format.
         notice (str, optional): An additional notice to prepend to the output.
             Defaults to an empty string.
+        max_chars (int, optional): Maximum length of the output part.
+            Defaults to MAX_OBS_CHARS.
     Returns:
         str: A formatted string containing the notice, notices, timeout
         information, and the processed output.
@@ -95,9 +99,9 @@ def format_observation(result, notice=""):
     output = result.output.strip()
     if not output:
         output = "(no output)"
-    elif len(output) > MAX_OBS_CHARS:
-        half = MAX_OBS_CHARS // 2
-        cut = len(output) - MAX_OBS_CHARS
+    elif len(output) > max_chars:
+        half = max_chars // 2
+        cut = len(output) - max_chars
         output = (output[:half]
                   + f"\n[... truncated {cut} chars ...]\n"
                   + output[-half:])
@@ -177,7 +181,8 @@ def run_agent(task_id, benchmark, system_prompt, user_prompt, sandbox, llm,
             observation = notice
         else:
             result = sandbox.execute(code)
-            observation = format_observation(result, notice)
+            observation = format_observation(result, notice,
+                                             limits.max_obs_chars)
             sandbox_input = code
             sandbox_output = result.output
             answer = result.final_answer
