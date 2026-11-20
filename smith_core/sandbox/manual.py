@@ -17,7 +17,7 @@ def tool_signature(tool) -> str:
     for name, prop in props.items():
         if name not in required:
             py_type = JSON_TO_PY.get(prop.get("type"), "Any")
-            parts.append(f"{name}: {py_type} = None")
+            parts.append(f"{name}: {py_type} = {prop.get('default')!r}")
     return f"{tool.name}({', '.join(parts)}) -> str"
 
 

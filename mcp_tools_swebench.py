@@ -19,6 +19,7 @@ EVAL_SCRIPT = os.environ.get("EVAL_SCRIPT_PATH", "/eval.sh")
 TESTS_TIMEOUT_S = 600
 # Name of the SWE-bench container. Empty: run locally (TESTBED_PATH).
 CONTAINER = os.environ.get("SWEBENCH_CONTAINER", "")
+CONDA = ". /opt/miniconda3/bin/activate testbed 2>/dev/null; "
 
 mcp = FastMCP("swebench-tools")
 
@@ -112,6 +113,8 @@ def run_command(command: str, workdir: str = ".") -> str:
     Returns:
         The exit code, then stdout and stderr.
     """
+    if CONTAINER:
+        command = CONDA + command
     code, out, err = _sh(command, workdir)
     result = (f"exit_code: {code}\n"
               f"stdout:\n{out}\n"
@@ -186,14 +189,14 @@ def read_file(filepath: str, start_line: int = 1,
 @mcp.tool()
 def search_code(pattern: str, file_pattern: str = "*.py") -> str:
     """Search a regex in all files whose NAME matches file_pattern
-    (a glob like '*.py', not a directory).
+    (a glob like '*.py', not a directory), inside the directory path.
 
     Returns:
         One match per line: '/absolute/path:<line> <content>'.
     """
     command = (f"grep -rnIE --exclude-dir=.git "
                f"--include={shlex.quote(file_pattern)} "
-               f"-e {shlex.quote(pattern)} {shlex.quote(TESTBED)}")
+               f"-e {shlex.quote(pattern)} {shlex.quote(_abs(path)}")
     code, out, err = _sh(command)
     if code == 1:
         return "No matches found."
