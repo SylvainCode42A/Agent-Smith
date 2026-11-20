@@ -1,6 +1,7 @@
 """MCP server exposing the SWE-bench tools.
 
-Run with:  TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py
+Run with:  TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py          (stdio)
+            TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py --http   (HTTP)
 """
 import os
 import subprocess
@@ -16,6 +17,8 @@ MAX_OUTPUT_CHARS = 10_000
 # Where the eval script is: /eval.sh is where the moulinette puts it.
 EVAL_SCRIPT = os.environ.get("EVAL_SCRIPT_PATH", "/eval.sh")
 TESTS_TIMEOUT_S = 600
+# Name of the SWE-bench container. Empty: run locally (TESTBED_PATH).
+CONTAINER = os.environ.get("SWEBENCH_CONTAINER", "")
 
 mcp = FastMCP("swebench-tools")
 
@@ -37,17 +40,21 @@ def _abs(path: str) -> str:
 
 
 def _sh(command: str, workdir: str | None = None,
-        timeout: int = TIMEOUT_S) -> tuple[int, str, str]:
-    """Run a shell command in the repo. Returns (exit_code, stdout, stderr)."""
+        timeout: int = TIMEOUT_S,
+        stdin: str | None = None) -> tuple[int, str, str]:
+    """Run a shell command in the repo (locally or inside the container)."""
     cwd = _abs(workdir) if workdir else TESTBED
+    if CONTAINER:
+        argv = ["docker", "exec", "-i", "-w", cwd, CONTAINER,
+                "bash", "-c", command]
+        local_cwd = None
+    else:
+        argv = ["bash", "-c", command]
+        local_cwd = cwd
     try:
-        proc = subprocess.run(
-            ["bash", "-c", command],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        proc = subprocess.run(argv, cwd=local_cwd, input=stdin,
+                            capture_output=True, text=True,
+                            timeout=timeout)
     except subprocess.TimeoutExpired:
         return 124, "", f"Command timed out after {timeout}s"
     except OSError as error:
@@ -57,12 +64,22 @@ def _sh(command: str, workdir: str | None = None,
 
 def _read(path: str) -> str:
     """Whole content of a file of the repo."""
+    if CONTAINER:
+        code, out, err = _sh(f"cat {shlex.quote(_abs(path))}")
+        if code != 0:
+            raise OSError(err.strip())
+        return out
     with open(_abs(path), encoding="utf-8", errors="replace") as file:
         return file.read()
 
 
 def _write(path: str, text: str) -> None:
     """Replace the whole content of a file of the repo."""
+    if CONTAINER:
+        code, _, err = _sh(f"cat > {shlex.quote(_abs(path))}", stdin=text)
+        if code != 0:
+            raise OSError(err.strip())
+        return
     with open(_abs(path), "w", encoding="utf-8") as file:
         file.write(text)
 
@@ -281,8 +298,6 @@ def run_tests() -> str:
 
     code, out, err = _sh(f"bash {shlex.quote(EVAL_SCRIPT)}",
                         timeout=TESTS_TIMEOUT_S)
-    code, out, err = _sh(f"bash {shlex.quote(EVAL_SCRIPT)}",
-                        timeout=TESTS_TIMEOUT_S)
     result = (f"exit_code: {code}\n"
                 f"stdout:\n{out}\n"
                 f"stderr:\n{err}")
@@ -290,4 +305,16 @@ def run_tests() -> str:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="SWE-bench MCP server")
+    parser.add_argument("--http", action="store_true",
+                        help="serve over streamable HTTP instead of stdio")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+
+    if args.http:
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
