@@ -178,3 +178,6 @@ print("  >>> REUSSITE geree correctement : OK\n")
 #   uv run python scripts/try_agent.py \
 #       https://generativelanguage.googleapis.com/v1beta/openai/ \
 #       gemini-3.5-flash-lite
+
+#       https://api.groq.com/openai/v1
+#       openai/gpt-oss-120b

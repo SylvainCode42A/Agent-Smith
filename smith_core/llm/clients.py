@@ -8,8 +8,22 @@ from smith_core.llm.keys import KeyRing, provider_prefix
 
 load_dotenv()
 
-MAX_RETRIES = 3
+MAX_RETRIES = 3          # other retryable errors (5xx, connection...)
 TIMEOUT_S = 60.0
+MAX_BACKOFF_S = 8        # cap of one wait for the other errors
+MAX_429_WAIT_S = 30      # cap of one wait after a 429 (rate limit)
+# Default total time we accept to wait on 429s during one chat() call.
+# Kept short for MBPP (100 s budget); SWE-bench passes a bigger value.
+DEFAULT_RATE_LIMIT_BUDGET_S = 15.0
+
+
+def retry_after_s(error: APIStatusError) -> float | None:
+    """Seconds asked by the provider in the Retry-After header, if any."""
+    try:
+        value = error.response.headers.get("retry-after")
+        return float(value) if value is not None else None
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 @dataclass
@@ -24,9 +38,12 @@ class LLMResponse:
 
 
 class LLMClient:
-    def __init__(self, base_url: str, model: str) -> None:
+    def __init__(self, base_url: str, model: str,
+                 rate_limit_budget_s: float = DEFAULT_RATE_LIMIT_BUDGET_S
+                 ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.rate_limit_budget_s = rate_limit_budget_s
         self.keyring = KeyRing(provider_prefix(base_url))
 
         self.client = OpenAI(
@@ -60,6 +77,8 @@ class LLMClient:
             """
 
         retries = 0
+        other_retries = 0
+        waited_429 = 0.0
         start = time.perf_counter()
         while True:
             try:
@@ -77,12 +96,25 @@ class LLMClient:
                              status >= 500 or
                              (status == 400 and isinstance(error.body, dict)
                               and error.body.get("code") == "tool_use_failed"))
-                if not retryable or retries >= MAX_RETRIES:
+                if not retryable:
                     raise
+                if status == 429:
+                    # Rate limit: wait as long as the provider asks (or
+                    # exponential), within the budget given to the client.
+                    wait = retry_after_s(error) or 2 ** (retries + 1)
+                    wait = min(wait, MAX_429_WAIT_S)
+                    if waited_429 + wait > self.rate_limit_budget_s:
+                        raise
+                    waited_429 += wait
+                else:
+                    if other_retries >= MAX_RETRIES:
+                        raise
+                    other_retries += 1
+                    wait = min(2 ** other_retries, MAX_BACKOFF_S)
                 retries += 1
                 self.client = self.client.with_options(
                     api_key=self.keyring.rotate())
-                time.sleep(min(2 ** retries, 8))
+                time.sleep(wait)
 
         usage = response.usage
         return LLMResponse(

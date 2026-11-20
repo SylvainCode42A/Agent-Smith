@@ -30,6 +30,8 @@ PATCH_TIMEOUT = 5         # git diff: short, may run during SIGTERM
 
 MAX_INPUT_TOKENS = 300_000
 MAX_OUTPUT_TOKENS = 10_000
+MAX_OBS_CHARS = 8000      # ~100-150 lines of code per observation
+RATE_LIMIT_BUDGET_S = 120  # total wait accepted on 429s per LLM call
 
 
 def current_patch(name: str) -> str:
@@ -88,7 +90,8 @@ def make_limits(max_iterations: int, start: float) -> Limits:
     return Limits(max_iterations=max_iterations,
                   max_input_tokens=MAX_INPUT_TOKENS,
                   max_output_tokens=MAX_OUTPUT_TOKENS,
-                  timeout_s=timeout_s)
+                  timeout_s=timeout_s,
+                  max_obs_chars=MAX_OBS_CHARS)
 
 
 def main() -> None:
@@ -119,7 +122,8 @@ def main() -> None:
             build_system_prompt(SWE_TEMPLATE, sandbox.manual()),
             build_user_prompt_swe(task),
             sandbox,
-            LLMClient(args.provider_url, args.model_name),
+            LLMClient(args.provider_url, args.model_name,
+                      rate_limit_budget_s=RATE_LIMIT_BUDGET_S),
             make_limits(args.max_iterations, start),
             lambda _steps: current_patch(name),
         )
