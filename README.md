@@ -48,12 +48,21 @@ The provider name comes from the URL (`https://api.groq.com/openai/v1` → `GROQ
 uv run sandbox                                                          # default config
 uv run sandbox sandbox_template.json                                    # custom config
 uv run sandbox --mcp-stdio "python mcp_tools_mbpp.py" sandbox_template.json
-uv run sandbox --mcp-server http://127.0.0.1:8000/mcp                   # HTTP server
-uv run sandbox --mcp-stdio "python mcp_tools_swebench.py" sandbox_template.json
 ```
-
 To start an MCP server over HTTP: `python mcp_tools_mbpp.py --http [--port 8000]`.
 Type `exit` or press Ctrl+D to quit the REPL.
+
+```bash
+uv run python mcp_tools_mbpp.py --http --port 8000
+uv run sandbox --mcp-server http://127.0.0.1:8000/mcp                   # HTTP server
+```
+And, to test SWEBench with a define file (for example: copy of Agent-Smith's project):
+
+```bash
+rsync -a --exclude .venv --exclude __pycache__ . /tmp/smith-copy        # Create a copy of Agent-Smith without .venv
+TESTBED_PATH=/tmp/smith-copy uv run sandbox --mcp-stdio "uv run python mcp_tools_swebench.py" sandbox_template.json
+```
+
 
 ### MBPP agent
 

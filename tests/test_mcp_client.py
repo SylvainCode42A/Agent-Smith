@@ -7,10 +7,11 @@ def test_connect_and_call():
     try:
         assert [t.name for t in client.tools] == ["run_tests"]
         out = client.call_tool("run_tests", {"code": "def f(): return 1",
-                                            "test_list": ["assert f()==1"]})
+                                             "test_list": ["assert f()==1"]})
         assert '"success": true' in out
     finally:
         client.close()
+
 
 def test_resources_and_prompts():
     client = McpClient.from_stdio("python mcp_tools_mbpp.py")

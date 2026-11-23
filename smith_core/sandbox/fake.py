@@ -16,7 +16,7 @@ class FakeSandbox:
     """Unsafe stand-in for Sandbox, used to test the agent loop."""
 
     def __init__(self, config: SandboxConfig,
-                mcp: Optional[McpClient]) -> None:
+                 mcp: Optional[McpClient]) -> None:
         """Store the config; the MCP client is ignored for now."""
         self._ns: Dict[str, Any] = {}
         self._final: Optional[str] = None

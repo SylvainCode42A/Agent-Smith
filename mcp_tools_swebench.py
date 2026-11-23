@@ -1,7 +1,8 @@
 """MCP server exposing the SWE-bench tools.
 
-Run with:  TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py          (stdio)
-            TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py --http   (HTTP)
+Run with:  TESTBED_PATH=/path/to/repo python mcp_tools_swebench.py (stdio)
+            TESTBED_PATH=/path/to/repo \
+            python mcp_tools_swebench.py --http (HTTP)
 """
 import os
 import subprocess
@@ -187,16 +188,17 @@ def read_file(filepath: str, start_line: int = 1,
 
 
 @mcp.tool()
-def search_code(pattern: str, file_pattern: str = "*.py") -> str:
+def search_code(pattern: str, file_pattern: str = "*.py",
+                path: str = ".") -> str:
     """Search a regex in all files whose NAME matches file_pattern
     (a glob like '*.py', not a directory), inside the directory path.
 
     Returns:
         One match per line: '/absolute/path:<line> <content>'.
     """
-    command = (f"grep -rnIE --exclude-dir=.git "
+    command = (f"grep -rnHIE --exclude-dir=.git "
                f"--include={shlex.quote(file_pattern)} "
-               f"-e {shlex.quote(pattern)} {shlex.quote(_abs(path)}")
+               f"-e {shlex.quote(pattern)} {shlex.quote(_abs(path))}")
     code, out, err = _sh(command)
     if code == 1:
         return "No matches found."

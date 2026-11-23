@@ -8,8 +8,8 @@ from smith_core.models import ExecResult, SandboxConfig
 from smith_core.sandbox.mcp_client import McpClient
 from smith_core.sandbox.manual import build_manual
 from smith_core.sandbox.security import (build_safe_builtins,
-                                        check_ast,
-                                        make_audit_hook)
+                                         check_ast,
+                                         make_audit_hook)
 
 MAX_OUTPUT_CHARS = 10_000
 
@@ -65,6 +65,7 @@ def _limit_memory(max_memory_mb: int) -> None:
     except (ImportError, ValueError, OSError):
         pass
 
+
 def _worker(conn, tool_specs: dict[str, list[str]],
             authorized_imports: list[str],
             allowed_dirs: list[str],
@@ -74,8 +75,8 @@ def _worker(conn, tool_specs: dict[str, list[str]],
     sys.stdout = _PipeStdout(conn)
     safe_builtins = build_safe_builtins(authorized_imports, allowed_dirs)
     namespace = {"__builtins__": safe_builtins,
-                "__name__": "__main__",
-                "final_answer": _final_answer}
+                 "__name__": "__main__",
+                 "final_answer": _final_answer}
     for name, params in tool_specs.items():
         namespace[name] = _make_tool_wrapper(conn, name, params)
 
@@ -94,20 +95,21 @@ def _worker(conn, tool_specs: dict[str, list[str]],
 
         except FinalAnswer as answer:
             conn.send({"type": "done", "final": str(answer.value),
-                        "error": None})
+                       "error": None})
 
         except (SystemExit, KeyboardInterrupt) as error:
             conn.send({"type": "done", "final": None, "error": None,
-                        "control": type(error).__name__})
+                       "control": type(error).__name__})
 
         except MemoryError:
             conn.send({"type": "done", "final": None,
-                        "error": f"MemoryError: exceeded the "
+                       "error": f"MemoryError: exceeded the "
                                 f"{max_memory_mb} MB memory limit"})
 
         except Exception as error:
             conn.send({"type": "done", "final": None,
-                        "error": f"{type(error).__name__}: {error}"})
+                       "error": f"{type(error).__name__}: {error}"})
+
 
 def _truncate(text: str) -> tuple[str, list[str]]:
     """Keep the head and tail of a too long output, with a notice."""
@@ -116,17 +118,18 @@ def _truncate(text: str) -> tuple[str, list[str]]:
     omitted = len(text) - MAX_OUTPUT_CHARS
     half = MAX_OUTPUT_CHARS // 2
     head = text[:half]
-    tail = text[-half:] 
+    tail = text[-half:]
     marker = f"\n[... output truncated: {omitted} chars omitted ...]\n"
     return (head + marker + tail,
             [f"Output was truncated to {MAX_OUTPUT_CHARS} characters "
                 f"({omitted} omitted)."])
 
+
 class Sandbox:
     """Runs code in a child process with the configured restrictions."""
 
     def __init__(self, config: SandboxConfig,
-                mcp: Optional[McpClient]) -> None:
+                 mcp: Optional[McpClient]) -> None:
         self._config = config
         self._mcp = mcp
         self._conn = None
@@ -151,12 +154,11 @@ class Sandbox:
         ctx = mp.get_context("spawn")
         self._conn, child_conn = ctx.Pipe()
         self._proc = ctx.Process(target=_worker,
-                                args=(child_conn,
-                                    self._tool_specs,
-                                    self._config.authorized_imports,
-                                    self._config.allowed_directories,
-                                    self._config.max_memory_mb),
-                                daemon=True)
+                                 args=(child_conn, self._tool_specs,
+                                       self._config.authorized_imports,
+                                       self._config.allowed_directories,
+                                       self._config.max_memory_mb),
+                                 daemon=True)
         self._proc.start()
 
     def _restart(self) -> None:
@@ -207,8 +209,8 @@ class Sandbox:
 
                 output, notices = _truncate(output)
                 return ExecResult(output=output,
-                                final_answer=msg["final"],
-                                notices=notices)
+                                  final_answer=msg["final"],
+                                  notices=notices)
 
     def _on_timeout(self, chunks: list[str]) -> ExecResult:
         """Kill the stuck child, start a fresh one, return partial output."""
@@ -232,7 +234,7 @@ class Sandbox:
         return ExecResult(
             output="".join(chunks),
             notices=[f"The sandbox process crashed (exit code {code}).",
-                    "The sandbox was restarted: all variables were reset."])
+                     "The sandbox was restarted: all variables were reset."])
 
     def _run_tool(self, name: str, kwargs: dict) -> dict:
         """Call the MCP tool for the child and build the reply message."""
@@ -244,7 +246,7 @@ class Sandbox:
                 value = self._mcp.read_resource(kwargs["uri"])
             elif name == "get_prompt":
                 value = self._mcp.get_prompt(kwargs["name"],
-                                            kwargs.get("arguments", {}))
+                                             kwargs.get("arguments", {}))
             else:
                 value = self._mcp.call_tool(name, kwargs)
             return {"type": "tool_result", "ok": True, "value": value}

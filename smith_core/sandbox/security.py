@@ -14,8 +14,8 @@ BLOCKED_BUILTINS = {
 }
 
 BLOCKED_EVENTS = ("socket.", "subprocess.", "os.system", "os.exec",
-                "os.spawn", "os.posix_spawn", "os.fork", "os.forkpty",
-                "os.kill", "os.killpg", "pty.spawn", "ctypes.")
+                  "os.spawn", "os.posix_spawn", "os.fork", "os.forkpty",
+                  "os.kill", "os.killpg", "pty.spawn", "ctypes.")
 
 WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
 
@@ -39,7 +39,7 @@ def is_import_allowed(name: str, allowed: list[str]) -> bool:
 def _refuse(name: str, allowed: list[str]) -> ImportError:
     """Build the error message shown to the LLM."""
     return ImportError(f"Import of '{name}' is not allowed. "
-                    f"Allowed imports: {', '.join(allowed)}")
+                       f"Allowed imports: {', '.join(allowed)}")
 
 
 def make_guarded_import(allowed: list[str]):
@@ -47,7 +47,7 @@ def make_guarded_import(allowed: list[str]):
     real_import = builtins.__import__
 
     def guarded_import(name, globals=None, locals=None,
-                    fromlist=(), level=0):
+                       fromlist=(), level=0):
         if level != 0:
             raise ImportError("Relative imports are not allowed")
 
@@ -142,6 +142,7 @@ def make_safe_open(allowed_dirs: list[str]):
 
     return safe_open
 
+
 def _is_read_only(mode, flags) -> bool:
     """True if an 'open' audit event only reads the file."""
     if isinstance(mode, str):
@@ -161,7 +162,8 @@ def make_audit_hook(allowed_dirs: list[str]):
             path = os.fsdecode(path)
             if is_path_allowed(path, allowed_dirs):
                 return
-            if _is_read_only(mode, flags) and is_path_allowed(path, python_dirs):
+            if _is_read_only(mode, flags) and is_path_allowed(path,
+                                                              python_dirs):
                 return
             raise PermissionError(f"Access to '{path}' is not allowed")
 

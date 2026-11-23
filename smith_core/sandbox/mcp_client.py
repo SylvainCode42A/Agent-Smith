@@ -9,6 +9,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
+
 async def _list_or_empty(request, field: str) -> list:
     """Run a list_* request; a server that does not support it gives []."""
     try:
@@ -16,6 +17,7 @@ async def _list_or_empty(request, field: str) -> list:
     except Exception:
         return []
     return getattr(result, field)
+
 
 class McpClient:
     """Keeps one MCP session open in a background asyncio thread."""
@@ -34,7 +36,9 @@ class McpClient:
 
     @classmethod
     def from_stdio(cls, command: str) -> "McpClient":
-        """Build a client from a shell command, e.g. 'python mcp_tools_mbpp.py'."""
+        """Build a client from a shell command, e.g.
+        'python mcp_tools_mbpp.py'."""
+
         parts = shlex.split(command)
         params = StdioServerParameters(
             command=parts[0],
@@ -84,7 +88,7 @@ class McpClient:
             self._ready.set()
 
     def call_tool(self, name: str, arguments: dict[str, Any],
-                timeout: float = 600) -> str:
+                  timeout: float = 600) -> str:
         """Call a tool synchronously and return its text output."""
         if self._session is None or self._loop is None:
             raise RuntimeError("McpClient is not connected")
@@ -104,18 +108,18 @@ class McpClient:
             self._session.read_resource(uri), self._loop)
         result = future.result(timeout)
         return "\n".join(c.text for c in result.contents
-                        if hasattr(c, "text"))
+                         if hasattr(c, "text"))
 
     def get_prompt(self, name: str, arguments: dict[str, str],
-                    timeout: float = 60) -> str:
+                   timeout: float = 60) -> str:
         """Fill a prompt synchronously and return its text."""
         if self._session is None or self._loop is None:
             raise RuntimeError("McpClient is not connected")
         future = asyncio.run_coroutine_threadsafe(
             self._session.get_prompt(name, arguments), self._loop)
         result = future.result(timeout)
-        return "\n".join(m.content.text for m in result.messages
-                if m.content.type == "text")
+        return "\n".join(m.content.text for m in result.messages if
+                         m.content.type == "text")
 
     def close(self) -> None:
         """Ask the background loop to stop and wait for the thread."""

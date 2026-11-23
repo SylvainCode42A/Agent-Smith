@@ -15,13 +15,15 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     """Read the command line options."""
     parser = argparse.ArgumentParser(
         prog="sandbox",
-        description="Interactive sandbox REPL (type 'exit' or Ctrl+D to quit).",
+        description="Interactive sandbox REPL (type 'exit'"
+        "or Ctrl+D to quit).",
     )
     parser.add_argument("config", nargs="?",
                         help="path to a SandboxConfig JSON file")
     server = parser.add_mutually_exclusive_group()
     server.add_argument("--mcp-stdio", metavar="COMMAND",
-                        help='MCP server command, e.g. "python mcp_tools_mbpp.py"')
+                        help='MCP server command, e.g. "python'
+                        'mcp_tools_mbpp.py"')
     server.add_argument("--mcp-server", metavar="URL",
                         help="MCP server URL (streamable HTTP)")
     return parser.parse_args(argv)
@@ -79,11 +81,11 @@ def repl(sandbox: Sandbox) -> None:
             result = sandbox.execute(code)
         except KeyboardInterrupt:
             print("KeyboardInterrupt")
-            continue                              
+            continue
         if result.output:
             print(result.output.rstrip("\n"))
         for notice in result.notices:
-            print(f"[NOTICE] {notice}")        
+            print(f"[NOTICE] {notice}")
         if result.final_answer is not None:
             print(f"FINAL ANSWER: {result.final_answer}")
 

@@ -80,9 +80,10 @@ def run_tests(code: str, test_list: list[str]) -> str:
             )
         except subprocess.TimeoutExpired:
             return json.dumps({"success": False,
-                            "output": f"Timeout after {TIMEOUT_S}s"})
+                               "output": f"Timeout after {TIMEOUT_S}s"})
     output = _truncate(proc.stdout + proc.stderr)
     return json.dumps({"success": proc.returncode == 0, "output": output})
+
 
 @mcp.resource("mbpp://guide")
 def guide() -> str:
@@ -92,11 +93,13 @@ def guide() -> str:
             "3. Fix it until success is true.\n"
             "4. Call final_answer(code).")
 
+
 @mcp.prompt()
 def solve_task(task: str) -> str:
     """Instruction to solve one MBPP task."""
     return (f"Solve this task in Python: {task}\n"
             "Test your function with run_tests before final_answer.")
+
 
 if __name__ == "__main__":
     import argparse

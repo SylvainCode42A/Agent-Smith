@@ -21,6 +21,7 @@ def sandbox():
 # ---------- règle seule (aucun process) ----------
 ALLOWED = ["math", "math.*", "collections.*", "re"]
 
+
 @pytest.mark.parametrize("name, expected", [
     ("math", True),
     ("collections.abc", True),
@@ -53,6 +54,7 @@ def test_import_allowed(sandbox, code):
 def test_import_blocked(sandbox, code):
     assert "ImportError" in sandbox.execute(code).output
 
+
 def test_fromlist_submodule_blocked():
     config = SandboxConfig(authorized_imports=["collections"])
     sb = Sandbox(config, None)
@@ -62,6 +64,7 @@ def test_fromlist_submodule_blocked():
         assert "collections.abc" in out and "ImportError" in out
     finally:
         sb.close()
+
 
 # ---------- restricted builtins ----------
 @pytest.mark.parametrize("code", [
@@ -105,6 +108,7 @@ def test_dunder_blocked_by_getattr(sandbox, code):
 ])
 def test_safe_code_still_works(sandbox, code):
     assert "ERROR" not in sandbox.execute(code).output
+
 
 # ---------- files ----------
 @pytest.mark.parametrize("code", [
@@ -153,6 +157,7 @@ def open_sandbox():
 def test_hook_blocks_even_if_import_allowed(open_sandbox, code):
     assert "PermissionError" in open_sandbox.execute(code).output
 
+
 # ---------- timeout ----------
 def test_timeout_partial_output_and_restart():
     sb = Sandbox(SandboxConfig(max_execution_time_seconds=2), None)
@@ -170,6 +175,7 @@ def test_timeout_partial_output_and_restart():
     finally:
         sb.close()
 
+
 def test_crash_is_reported_and_sandbox_restarts():
     sb = Sandbox(SandboxConfig(authorized_imports=["os"]), None)
     sb.start()
@@ -181,6 +187,7 @@ def test_crash_is_reported_and_sandbox_restarts():
         assert sb.execute("print(2)").output == "2\n"
     finally:
         sb.close()
+
 
 @pytest.mark.skipif(sys.platform == "darwin",
                     reason="RLIMIT_AS is not enforced on macOS")
@@ -194,12 +201,14 @@ def test_memory_limit():
     finally:
         sb.close()
 
+
 def test_output_is_truncated(sandbox):
     res = sandbox.execute("print('a' * 50_000)")
     assert len(res.output) < 11_000
     assert "output truncated" in res.output
     assert res.notices
     assert res.output.rstrip().endswith("a")
+
 
 @pytest.mark.parametrize("code, exc", [
     ("raise SystemExit", SystemExit),
@@ -215,6 +224,7 @@ def test_control_exceptions_reach_caller(code, exc):
         assert sb.execute("print(x)").output == "1\n"
     finally:
         sb.close()
+
 
 PORT = 8765                                  # not 8000: avoid clashes
 
@@ -236,7 +246,7 @@ def test_http_connect_and_call(http_server):
     try:
         assert [t.name for t in client.tools] == ["run_tests"]
         out = client.call_tool("run_tests", {"code": "def f(): return 1",
-                                            "test_list": ["assert f()==1"]})
+                                             "test_list": ["assert f()==1"]})
         assert '"success": true' in out
     finally:
         client.close()
