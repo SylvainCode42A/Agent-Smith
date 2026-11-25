@@ -15,6 +15,27 @@ It runs on two benchmarks:
 | **MBPP** | small algorithmic Python problems | the function source code |
 | **SWE-bench Verified** | real bugs in real open-source repositories (in Docker) | a git patch |
 
+
+**Note — Rootless Docker on 42 workstations.** On school accounts,
+the host's UID (for example, 102605) is outside the subuid range
+managed by rootless Docker. This issue has already been raised during previous thesis defenses. 
+When `validate swebench` copies `patch.diff` into the container,
+the script creates a tar archive that preserves the host’s UID. 
+Docker then fails with
+`failed to Lchown “patch.diff” ... invalid argument`, and the task is
+marked as FAILED even if the patch is correct.
+
+To work around the problem without modifying the moulinette script, we run the
+validation in a user namespace using `unshare -r`. Our UID is treated
+as 0 there: the archived files therefore belong to root, and Docker can
+extract them. The problem stems solely from the
+evaluation environment; the agent itself is not affected.
+
+```bash
+cd moulinette
+unshare -r uv run moulinette_eval validate swebench task.json solution.json
+```
+
 Main features:
 
 - the agent loop is our own **Thought → Code → Observation** loop (we use no agent library) ;
