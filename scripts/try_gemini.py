@@ -13,7 +13,6 @@ client = OpenAI(
     timeout=60,
 )
 
-# Un appel, avec stop + réflexion réduite
 start = time.perf_counter()
 try:
     response = client.chat.completions.create(
